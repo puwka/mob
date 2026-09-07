@@ -1,0 +1,32 @@
+-- ============================================================
+-- HOW TO FIX: deadlock on 000026 / 000027
+-- ============================================================
+--
+-- Cause: migration needs AccessExclusiveLock (ALTER/POLICY) while
+-- the app or another SQL tab holds AccessShareLock on related tables.
+--
+-- Steps:
+-- 1. Close other Supabase SQL Editor tabs
+-- 2. Stop admin `npm run dev` and pause mobile if possible
+-- 3. Wait ~30s for locks to clear
+-- 4. Apply safe_chunks IN ORDER (one file = one Run):
+--
+--    safe_chunks/01_schema_ddl.sql
+--    safe_chunks/02_rbac_functions.sql
+--    safe_chunks/03_dialog_policies.sql
+--    then the FUNCTION-heavy parts of:
+--      20260322000026_admin_final_part1.sql  (from "-- 4) RBAC" / dialog RPCs
+--      OR simply re-run full 000026 then 000027 after DDL is done —
+--      CREATE OR REPLACE FUNCTION rarely deadlocks)
+--
+-- 5. Prefer: after 01–03 succeed, run entire 000026 then 000027 again
+--    (idempotent). Functions will replace; DDL will no-op.
+--
+-- Quick lock check (optional):
+-- SELECT pid, state, wait_event_type, query
+-- FROM pg_stat_activity
+-- WHERE datname = current_database() AND pid <> pg_backend_pid();
+--
+-- Cancel a stuck session (use with care):
+-- SELECT pg_terminate_backend(<pid>);
+-- ============================================================

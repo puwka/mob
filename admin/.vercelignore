@@ -1,0 +1,4 @@
+# Keep local secrets / tooling out of Vercel uploads.
+.env*
+!.env.example
+.vercel
