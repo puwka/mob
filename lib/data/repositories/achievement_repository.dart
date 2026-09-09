@@ -52,7 +52,20 @@ class AchievementRepository {
         .toList();
   }
 
-  /// Recalculates progress from profile + events count and upserts rows.
+  Future<AchievementMetrics> fetchMetrics(String userId) async {
+    try {
+      final raw = await _client.rpc(
+        'get_achievement_metrics',
+        params: {'p_user_id': userId},
+      );
+      if (raw is Map) {
+        return AchievementMetrics.fromJson(Map<String, dynamic>.from(raw));
+      }
+    } catch (_) {}
+    return const AchievementMetrics();
+  }
+
+  /// Recalculates progress from live metrics and upserts rows.
   Future<AchievementSyncResult> syncForProfile({
     required String userId,
     required Profile profile,
@@ -65,21 +78,39 @@ class AchievementRepository {
       for (final row in existingRows) row.achievementId: row,
     };
 
+    var metrics = await fetchMetrics(userId);
+    if (metrics.gamesPlayed == 0 &&
+        metrics.wins == 0 &&
+        metrics.rating == 0 &&
+        profile.gamesPlayed + profile.wins + profile.rating > 0) {
+      // RPC unavailable — fall back to profile + events count.
+      metrics = AchievementMetrics(
+        gamesPlayed: profile.gamesPlayed,
+        wins: profile.wins,
+        polygonsVisited: profile.polygonsVisited,
+        rating: profile.rating,
+        eventsCount: eventsCount,
+        teamGames: (profile.teamName?.trim().isNotEmpty ?? false)
+            ? profile.gamesPlayed
+            : 0,
+        roleGames: (profile.gameRole?.trim().isNotEmpty ?? false)
+            ? profile.gamesPlayed
+            : 0,
+      );
+    }
+
     final evaluated = _service.evaluate(
-      profile: profile,
       catalog: achievements,
-      eventsCount: eventsCount,
+      metrics: metrics,
       existing: existing,
     );
 
     final newlyUnlocked = <UserAchievementProgress>[];
-
     final upserts = <Map<String, dynamic>>[];
     for (final item in evaluated) {
       final prev = existing[item.achievement.id];
       final wasUnlocked = prev?.unlocked ?? false;
-      final newly = item.unlocked && !wasUnlocked;
-      if (newly) newlyUnlocked.add(item);
+      if (item.unlocked && !wasUnlocked) newlyUnlocked.add(item);
 
       upserts.add({
         'achievement_id': item.achievement.id,
@@ -111,10 +142,27 @@ class AchievementRepository {
     final existing = {
       for (final row in existingRows) row.achievementId: row,
     };
+    var metrics = await fetchMetrics(profile.id);
+    if (metrics.gamesPlayed == 0 &&
+        metrics.eventsCount == 0 &&
+        (profile.gamesPlayed > 0 || eventsCount > 0)) {
+      metrics = AchievementMetrics(
+        gamesPlayed: profile.gamesPlayed,
+        wins: profile.wins,
+        polygonsVisited: profile.polygonsVisited,
+        rating: profile.rating,
+        eventsCount: eventsCount,
+        teamGames: (profile.teamName?.trim().isNotEmpty ?? false)
+            ? profile.gamesPlayed
+            : 0,
+        roleGames: (profile.gameRole?.trim().isNotEmpty ?? false)
+            ? profile.gamesPlayed
+            : 0,
+      );
+    }
     return _service.evaluate(
-      profile: profile,
       catalog: achievements,
-      eventsCount: eventsCount,
+      metrics: metrics,
       existing: existing,
     );
   }

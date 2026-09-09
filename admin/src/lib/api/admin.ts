@@ -169,6 +169,38 @@ export async function setPanelRole(
   return (data as AdminRole | null) ?? null;
 }
 
+export type ProfileTag = "sherpa";
+
+export async function fetchProfileTag(
+  userId: string,
+): Promise<ProfileTag | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("admin_get_profile_tag", {
+    p_user_id: userId,
+  });
+  if (error) mapRpcError(error);
+  return (data as ProfileTag | null) ?? null;
+}
+
+export async function setProfileTag(
+  userId: string,
+  tag: ProfileTag | null,
+): Promise<ProfileTag | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("admin_set_profile_tag", {
+    p_user_id: userId,
+    p_tag: tag,
+  });
+  if (error) {
+    const msg = error.message ?? "";
+    if (msg.includes("INVALID_PROFILE_TAG")) {
+      throw new Error("Некорректный тег профиля");
+    }
+    mapRpcError(error);
+  }
+  return (data as ProfileTag | null) ?? null;
+}
+
 export async function adjustBalance(
   organizerId: string,
   amount: number,

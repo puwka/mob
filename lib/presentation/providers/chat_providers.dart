@@ -92,6 +92,10 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
       try {
         await repo.openCityChat();
       } catch (_) {}
+    } else if (arg == ConversationType.event) {
+      try {
+        await repo.autoFinishPastEvents();
+      } catch (_) {}
     }
 
     // If session flipped mid-await, don't publish the wrong inbox.

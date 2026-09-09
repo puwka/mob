@@ -26,6 +26,7 @@ abstract final class AppColors {
   static const Color roleAdmin = Color(0xFFE25B5B);
   static const Color roleModerator = Color(0xFFC9A227);
   static const Color roleOrganizer = Color(0xFFA4C639);
+  static const Color roleSherpa = Color(0xFF6BB3B0);
   static const Color roleUser = Color(0xFF4B8BDB);
   static const Color gold = Color(0xFFC9A227);
   static const Color silver = Color(0xFFA8ADB4);

@@ -17,11 +17,12 @@ enum AppRole {
   bool get isOrganizer => this == AppRole.organizer;
 }
 
-/// Badge near nickname: admin > moderator > organizer > user.
+/// Badge near nickname: admin > moderator > organizer > sherpa > user.
 enum ProfileBadgeRole {
   admin,
   moderator,
   organizer,
+  sherpa,
   user;
 
   static ProfileBadgeRole fromString(String? value) {
@@ -32,6 +33,8 @@ enum ProfileBadgeRole {
         return ProfileBadgeRole.moderator;
       case 'organizer':
         return ProfileBadgeRole.organizer;
+      case 'sherpa':
+        return ProfileBadgeRole.sherpa;
       default:
         return ProfileBadgeRole.user;
     }
@@ -47,6 +50,7 @@ enum ProfileBadgeRole {
         ProfileBadgeRole.admin => 'Админ',
         ProfileBadgeRole.moderator => 'Модератор',
         ProfileBadgeRole.organizer => 'Организатор',
+        ProfileBadgeRole.sherpa => 'Шерп',
         ProfileBadgeRole.user => 'Пользователь',
       };
 }

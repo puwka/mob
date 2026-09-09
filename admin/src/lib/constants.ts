@@ -12,13 +12,40 @@ export const LISTING_STATUSES = [
   "archived",
   "sold",
 ] as const;
-export const ACHIEVEMENT_TYPES = [
-  "games_played",
-  "wins",
-  "polygons_visited",
-  "rating",
-  "events_count",
+
+/** Achievement condition type → label for admin UI */
+export const ACHIEVEMENT_TYPE_OPTIONS = [
+  { value: "games_played", label: "Количество сыгранных игр" },
+  { value: "polygons_visited", label: "Количество разных полигонов" },
+  { value: "team_games", label: "Количество игр в составе команды" },
+  { value: "organized_events", label: "Количество проведённых игр" },
+  {
+    value: "organized_participants",
+    label: "Количество участников в организованных играх",
+  },
+  { value: "role_games", label: "Количество сыгранных игр в роли" },
+  { value: "messages_sent", label: "Количество сообщений в чатах" },
+  { value: "dating_likes", label: "Количество симпатий в дейтинге" },
+  {
+    value: "profile_photos",
+    label: "Количество фотографий, добавленных в профиль",
+  },
+  { value: "clan_joined", label: "Вступление в клан (1 = состоит)" },
+  {
+    value: "events_attended_confirmed",
+    label: "Количество подтверждённых участий в игре",
+  },
+  {
+    value: "listings_published",
+    label: "Количество опубликованных объявлений на барахолке",
+  },
+  { value: "events_count", label: "Количество регистраций на игры" },
+  { value: "wins", label: "Количество побед" },
+  { value: "rating", label: "Рейтинг (XP)" },
 ] as const;
+
+/** @deprecated use ACHIEVEMENT_TYPE_OPTIONS */
+export const ACHIEVEMENT_TYPES = ACHIEVEMENT_TYPE_OPTIONS.map((o) => o.value);
 
 export type NavItem = {
   href: string;

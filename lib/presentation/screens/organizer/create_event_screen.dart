@@ -8,8 +8,10 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../domain/models/conversation.dart';
 import '../../../domain/models/polygon.dart';
 import '../../../presentation/providers/auth_providers.dart';
+import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
 import '../../../presentation/providers/polygon_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
@@ -263,6 +265,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }
 
       ref.invalidate(myOrganizerEventsProvider);
+      ref.invalidate(conversationsByTypeProvider(ConversationType.event));
       if (!mounted) return;
       context.go('/main/profile/organizer/events/$eventId');
     } catch (e) {

@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../domain/models/conversation.dart';
 import '../../../domain/models/event.dart';
+import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
@@ -27,6 +29,52 @@ class OrganizerEventDetailsScreen extends ConsumerStatefulWidget {
 class _OrganizerEventDetailsScreenState
     extends ConsumerState<OrganizerEventDetailsScreen> {
   var _deleting = false;
+  var _finishing = false;
+
+  Future<void> _finishEvent(Event event) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Завершить мероприятие?'),
+        content: Text(
+          '«${event.title}» будет отмечено как завершённое. '
+          'Чат мероприятия удалится у всех участников.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Завершить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _finishing = true);
+    try {
+      await ref.read(eventRepositoryProvider).finishEvent(widget.eventId);
+      ref.invalidate(eventDetailsProvider(widget.eventId));
+      ref.invalidate(myOrganizerEventsProvider);
+      ref.invalidate(conversationsByTypeProvider(ConversationType.event));
+      ref.invalidate(eventsListProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Мероприятие завершено')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ErrorMapper.map(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _finishing = false);
+    }
+  }
 
   Future<void> _deleteEvent(Event event) async {
     final ok = await showDialog<bool>(
@@ -61,6 +109,7 @@ class _OrganizerEventDetailsScreenState
       ref.invalidate(myOrganizerEventsProvider);
       ref.invalidate(eventDetailsProvider(widget.eventId));
       ref.invalidate(eventsListProvider);
+      ref.invalidate(conversationsByTypeProvider(ConversationType.event));
       if (!mounted) return;
       context.go('/main/profile/organizer/events');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -227,19 +276,35 @@ class _OrganizerEventDetailsScreenState
               AppButton(
                 label: 'Сканировать QR',
                 icon: Icons.qr_code_scanner,
-                onPressed: !_deleting && event.status == EventStatus.active
+                onPressed: !_deleting &&
+                        !_finishing &&
+                        event.status == EventStatus.active
                     ? () => context.push(
                           '/main/profile/organizer/events/$eventId/scanner',
                         )
                     : null,
               ),
+              if (event.status == EventStatus.active ||
+                  event.status == EventStatus.draft) ...[
+                const SizedBox(height: 8),
+                AppButton(
+                  label: 'Завершить мероприятие',
+                  icon: Icons.flag_outlined,
+                  loading: _finishing,
+                  onPressed: _deleting || _finishing
+                      ? null
+                      : () => _finishEvent(event),
+                ),
+              ],
               const SizedBox(height: 8),
               AppButton(
                 label: 'Удалить мероприятие',
                 variant: AppButtonVariant.danger,
                 loading: _deleting,
                 icon: Icons.delete_outline,
-                onPressed: _deleting ? null : () => _deleteEvent(event),
+                onPressed: _deleting || _finishing
+                    ? null
+                    : () => _deleteEvent(event),
               ),
             ],
           );

@@ -268,6 +268,14 @@ class EventRepository {
     }
   }
 
+  Future<void> finishEvent(String eventId) async {
+    try {
+      await _client.rpc('finish_event', params: {'p_event_id': eventId});
+    } catch (e) {
+      throw AppException(_mapEventError(e));
+    }
+  }
+
   Future<Event> join(String eventId) async {
     try {
       await _client.rpc('join_event', params: {'p_event_id': eventId});

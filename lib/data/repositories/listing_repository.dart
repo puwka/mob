@@ -231,7 +231,7 @@ class ListingRepository {
     required double price,
     required String city,
     required ListingCondition condition,
-    ListingStatus status = ListingStatus.active,
+    ListingStatus status = ListingStatus.pending,
   }) async {
     try {
       final userId = _client.auth.currentUser?.id;

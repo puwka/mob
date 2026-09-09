@@ -15,7 +15,7 @@ import {
   upsertAchievement,
   type AchievementRow,
 } from "@/lib/api/content";
-import { ACHIEVEMENT_TYPES } from "@/lib/constants";
+import { ACHIEVEMENT_TYPE_OPTIONS } from "@/lib/constants";
 import { formatNumber } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -85,10 +85,13 @@ export default function AchievementsPage() {
                     </div>
                   </td>
                   <td>
-                    <Badge tone="neutral">{a.type}</Badge>
+                    <Badge tone="neutral">
+                      {ACHIEVEMENT_TYPE_OPTIONS.find((o) => o.value === a.type)
+                        ?.label ?? a.type}
+                    </Badge>
                   </td>
                   <td className="font-mono text-[12px]">
-                    {a.type} &gt;= {formatNumber(a.required_value)}
+                    ≥ {formatNumber(a.required_value)}
                   </td>
                   <td className="text-[12px]">{a.icon}</td>
                   <td>
@@ -184,9 +187,9 @@ function AchievementForm({
             value={type}
             onChange={(e) => setType(e.target.value)}
           >
-            {ACHIEVEMENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {ACHIEVEMENT_TYPE_OPTIONS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
               </option>
             ))}
           </select>

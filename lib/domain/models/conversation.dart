@@ -3,7 +3,8 @@ enum ConversationType {
   dating,
   clan,
   user,
-  city;
+  city,
+  event;
 
   static ConversationType fromString(String value) {
     return ConversationType.values.firstWhere(
@@ -18,6 +19,7 @@ enum ConversationType {
         ConversationType.clan => 'Клан',
         ConversationType.user => 'Личные',
         ConversationType.city => 'Город',
+        ConversationType.event => 'Мероприятия',
       };
 }
 
@@ -247,6 +249,9 @@ class ConversationPreview {
     if (type == ConversationType.city) {
       return title ?? 'Чат города';
     }
+    if (type == ConversationType.event) {
+      return title ?? 'Мероприятие';
+    }
     return peerNickname ?? title ?? 'Диалог';
   }
 
@@ -328,6 +333,9 @@ class ConversationDetail {
     }
     if (type == ConversationType.city) {
       return title ?? 'Чат города';
+    }
+    if (type == ConversationType.event) {
+      return title ?? 'Мероприятие';
     }
     return peerNickname ?? title ?? 'Диалог';
   }

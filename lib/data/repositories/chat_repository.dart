@@ -497,6 +497,12 @@ class ChatRepository {
     }
   }
 
+  Future<void> autoFinishPastEvents() async {
+    try {
+      await _client.rpc('auto_finish_past_events');
+    } catch (_) {}
+  }
+
   Future<List<String>> fetchMyClanIds() async {
     try {
       final uid = _uid;

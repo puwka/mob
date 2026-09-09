@@ -50,7 +50,7 @@ class TacticalApp extends ConsumerWidget {
     final router = ref.watch(goRouterProvider);
 
     return MaterialApp.router(
-      title: 'Tactical',
+      title: 'Мой Страйкбол',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       routerConfig: router,

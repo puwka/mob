@@ -17,6 +17,7 @@ class RoleBadge extends StatelessWidget {
         ProfileBadgeRole.admin => AppColors.roleAdmin,
         ProfileBadgeRole.moderator => AppColors.roleModerator,
         ProfileBadgeRole.organizer => AppColors.roleOrganizer,
+        ProfileBadgeRole.sherpa => AppColors.roleSherpa,
         ProfileBadgeRole.user => AppColors.roleUser,
       };
 

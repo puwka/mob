@@ -137,6 +137,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                         'city' => ConversationType.city,
                         'market' => ConversationType.market,
                         'dating' => ConversationType.dating,
+                        'event' => ConversationType.event,
                         _ => ConversationType.market,
                       };
                       return ChatFolderScreen(type: type);

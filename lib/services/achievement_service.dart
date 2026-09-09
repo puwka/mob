@@ -1,44 +1,21 @@
 import '../domain/models/achievement.dart';
-import '../domain/models/profile.dart';
 import '../domain/models/user_achievement_progress.dart';
 
-/// Computes achievement progress from profile + live events count.
+/// Computes achievement progress from live metrics.
 class AchievementService {
   const AchievementService();
 
-  int valueForType(
-    Profile profile,
-    String type, {
-    required int eventsCount,
-  }) {
-    switch (type) {
-      case AchievementTypes.gamesPlayed:
-        return profile.gamesPlayed;
-      case AchievementTypes.wins:
-        return profile.wins;
-      case AchievementTypes.polygonsVisited:
-        return profile.polygonsVisited;
-      case AchievementTypes.rating:
-        return profile.rating;
-      case AchievementTypes.eventsCount:
-        return eventsCount;
-      default:
-        return 0;
-    }
+  int valueForType(String type, AchievementMetrics metrics) {
+    return metrics.valueFor(type);
   }
 
   List<UserAchievementProgress> evaluate({
-    required Profile profile,
     required List<Achievement> catalog,
-    required int eventsCount,
+    required AchievementMetrics metrics,
     Map<String, UserAchievementRecord> existing = const {},
   }) {
     return catalog.map((achievement) {
-      final current = valueForType(
-        profile,
-        achievement.type,
-        eventsCount: eventsCount,
-      );
+      final current = valueForType(achievement.type, metrics);
       final capped = current.clamp(0, achievement.requiredValue);
       final unlocked = current >= achievement.requiredValue;
       final ratio = achievement.requiredValue == 0

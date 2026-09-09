@@ -8,9 +8,10 @@ import {
   LoadingBlock,
   PageHeader,
 } from "@/components/ui/page";
-import { adjustBalance, fetchPanelRole, fetchUserDetail, setAppRole, setPanelRole, setUserStatus, updateProfileAdmin } from "@/lib/api/admin";
+import { adjustBalance, fetchPanelRole, fetchProfileTag, fetchUserDetail, setAppRole, setPanelRole, setProfileTag, setUserStatus, updateProfileAdmin } from "@/lib/api/admin";
 import { CITIES } from "@/lib/constants";
 import type { AdminRole } from "@/lib/types";
+import type { ProfileTag } from "@/lib/api/admin";
 import { useAuth } from "@/providers/auth-provider";
 import { usePermissions } from "@/hooks/use-permissions";
 import { formatDate, formatNumber } from "@/lib/utils";
@@ -35,6 +36,7 @@ export default function UserDetailPage() {
   const { admin } = useAuth();
   const [message, setMessage] = useState<string | null>(null);
   const [panelRoleDraft, setPanelRoleDraft] = useState<string>("");
+  const [profileTagDraft, setProfileTagDraft] = useState<string>("");
 
   const detailQuery = useQuery({
     queryKey: ["admin-user", userId],
@@ -47,9 +49,19 @@ export default function UserDetailPage() {
     enabled: !!userId && (admin?.role === "super_admin" || admin?.role === "admin"),
   });
 
+  const profileTagQuery = useQuery({
+    queryKey: ["admin-profile-tag", userId],
+    queryFn: () => fetchProfileTag(userId),
+    enabled: !!userId && (admin?.role === "super_admin" || admin?.role === "admin"),
+  });
+
   useEffect(() => {
     setPanelRoleDraft(panelRoleQuery.data ?? "");
   }, [panelRoleQuery.data]);
+
+  useEffect(() => {
+    setProfileTagDraft(profileTagQuery.data ?? "");
+  }, [profileTagQuery.data]);
 
   const user = detailQuery.data?.user;
 
@@ -119,6 +131,18 @@ export default function UserDetailPage() {
       );
       await queryClient.invalidateQueries({
         queryKey: ["admin-panel-role", userId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-audit-logs"] });
+    },
+    onError: (err: Error) => setMessage(err.message),
+  });
+
+  const profileTagMutation = useMutation({
+    mutationFn: (tag: ProfileTag | null) => setProfileTag(userId, tag),
+    onSuccess: async (tag) => {
+      setMessage(tag ? `Тег: ${tag === "sherpa" ? "Шерп" : tag}` : "Тег снят");
+      await queryClient.invalidateQueries({
+        queryKey: ["admin-profile-tag", userId],
       });
       await queryClient.invalidateQueries({ queryKey: ["admin-audit-logs"] });
     },
@@ -273,6 +297,56 @@ export default function UserDetailPage() {
               }
             >
               Сохранить доступ
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {(admin?.role === "super_admin" || admin?.role === "admin") ? (
+        <div className="mb-5 admin-card space-y-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Тег профиля</h2>
+              <p className="mt-1 text-[12px] text-graphite-600">
+                Только отображение в приложении, без прав. Сейчас:{" "}
+                {profileTagQuery.data === "sherpa"
+                  ? "Шерп"
+                  : "нет"}
+              </p>
+            </div>
+            {profileTagQuery.data === "sherpa" ? (
+              <Badge tone="lime">Шерп</Badge>
+            ) : (
+              <Badge tone="neutral">нет тега</Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-[180px] flex-1 text-[12px] text-graphite-600">
+              Тег
+              <select
+                className="admin-input mt-1"
+                value={profileTagDraft}
+                onChange={(e) => setProfileTagDraft(e.target.value)}
+              >
+                <option value="">Нет</option>
+                <option value="sherpa">Шерп</option>
+              </select>
+            </label>
+            <Button
+              type="button"
+              disabled={
+                profileTagMutation.isPending ||
+                profileTagDraft === (profileTagQuery.data ?? "")
+              }
+              onClick={() =>
+                profileTagMutation.mutate(
+                  profileTagDraft
+                    ? (profileTagDraft as ProfileTag)
+                    : null,
+                )
+              }
+            >
+              Сохранить тег
             </Button>
           </div>
         </div>

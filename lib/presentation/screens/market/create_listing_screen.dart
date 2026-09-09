@@ -165,7 +165,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
           price: price,
           city: _city.text,
           condition: _condition,
-          status: ListingStatus.active,
+          status: ListingStatus.pending,
         );
       }
 
@@ -200,7 +200,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       context.pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.isEdit ? 'Объявление обновлено' : 'Объявление опубликовано'),
+          content: Text(widget.isEdit ? 'Объявление обновлено' : 'Отправлено на модерацию'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -471,7 +471,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               ],
               const SizedBox(height: 18),
               AppButton(
-                label: widget.isEdit ? 'Сохранить' : 'Опубликовать',
+                label: widget.isEdit ? 'Сохранить' : 'Отправить на модерацию',
                 loading: _loading,
                 onPressed: _loading ? null : _submit,
               ),

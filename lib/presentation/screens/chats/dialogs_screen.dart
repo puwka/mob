@@ -121,6 +121,19 @@ class DialogsScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 6),
                         _FolderTile(
+                          title: ConversationType.event.folderLabel,
+                          subtitle: _folderSubtitle(
+                            unread: unreadMap[ConversationType.event] ?? 0,
+                            emptyHint: 'Чаты ваших игр',
+                          ),
+                          meta: 'Папка',
+                          icon: Icons.event_outlined,
+                          unread: unreadMap[ConversationType.event] ?? 0,
+                          onTap: () =>
+                              context.go('/main/chats/folder/event'),
+                        ),
+                        const SizedBox(height: 6),
+                        _FolderTile(
                           title: ConversationType.clan.folderLabel,
                           subtitle: myClan?.name ??
                               _folderSubtitle(
@@ -251,7 +264,9 @@ class ChatFolderScreen extends ConsumerWidget {
                           ? 'Совпадения из Знакомств появятся здесь.'
                           : type == ConversationType.city
                               ? 'Укажите город в профиле — чат откроется автоматически.'
-                              : 'Вступите в клан, чтобы открыть чаты.',
+                              : type == ConversationType.event
+                                  ? 'Создайте игру или нажмите «Участвовать» — чат появится здесь.'
+                                  : 'Вступите в клан, чтобы открыть чаты.',
                   icon: Icons.chat_bubble_outline,
                 ),
               ],
@@ -276,7 +291,9 @@ class ChatFolderScreen extends ConsumerWidget {
                       ? _clanChannelIcon(item)
                       : type == ConversationType.city
                           ? _cityChatIcon()
-                          : null,
+                          : type == ConversationType.event
+                              ? _eventChatIcon()
+                              : null,
                   onConfirmDelete: (type == ConversationType.market ||
                           type == ConversationType.dating)
                       ? () => _confirmHideDialog(context, ref, item)
@@ -310,6 +327,18 @@ Widget _cityChatIcon() {
     backgroundColor: AppColors.surfaceElevated,
     child: Icon(
       Icons.location_city_outlined,
+      color: AppColors.accent,
+      size: 22,
+    ),
+  );
+}
+
+Widget _eventChatIcon() {
+  return const CircleAvatar(
+    radius: 22,
+    backgroundColor: AppColors.surfaceElevated,
+    child: Icon(
+      Icons.event_outlined,
       color: AppColors.accent,
       size: 22,
     ),

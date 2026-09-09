@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/event_cities.dart';
+import '../../domain/models/conversation.dart';
 import '../../domain/models/event.dart';
 import 'auth_providers.dart';
+import 'chat_providers.dart';
 import 'profile_providers.dart';
 import 'progression_providers.dart';
 import 'repository_providers.dart';
@@ -111,6 +113,8 @@ class EventDetailsNotifier extends FamilyAsyncNotifier<Event, String> {
     final updated = await ref.read(eventRepositoryProvider).join(arg);
     state = AsyncData(updated);
     await ref.read(eventsListProvider.notifier).refresh(silent: true);
+    ref.invalidate(conversationsByTypeProvider(ConversationType.event));
+    unawaited(ref.read(folderUnreadProvider.notifier).refresh(silent: true));
 
     // 2) Recalculate XP / level / achievements from live counts.
     try {
@@ -127,6 +131,8 @@ class EventDetailsNotifier extends FamilyAsyncNotifier<Event, String> {
     final updated = await ref.read(eventRepositoryProvider).leave(arg);
     state = AsyncData(updated);
     await ref.read(eventsListProvider.notifier).refresh(silent: true);
+    ref.invalidate(conversationsByTypeProvider(ConversationType.event));
+    unawaited(ref.read(folderUnreadProvider.notifier).refresh(silent: true));
     try {
       await ref
           .read(progressionControllerProvider.notifier)
