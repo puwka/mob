@@ -12,7 +12,7 @@ class ProfilePhotoRepository {
 
   final SupabaseClient _client;
 
-  static const maxPhotosFallback = 4;
+  static const maxPhotosFallback = 6;
   static const bucket = 'avatars';
 
   Future<int> resolveMaxPhotos() async {
@@ -100,7 +100,9 @@ class ProfilePhotoRepository {
       if (e is AppException) rethrow;
       final msg = e.toString().toUpperCase();
       if (msg.contains('PHOTO_LIMIT')) {
-        throw const AppException('Можно загрузить максимум 4 фото');
+        throw AppException(
+          'Можно загрузить максимум $maxPhotosFallback фото',
+        );
       }
       throw AppException(ErrorMapper.map(e));
     }

@@ -12,6 +12,7 @@ import '../../../presentation/providers/clan_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
+import '../../../widgets/city_picker.dart';
 import '../../../widgets/feedback.dart';
 
 class ClanProfileScreen extends ConsumerWidget {
@@ -25,8 +26,9 @@ class ClanProfileScreen extends ConsumerWidget {
     final membersAsync = ref.watch(clanMembersProvider(clanId));
     final myRole = ref.watch(myClanRoleProvider(clanId)).valueOrNull;
     final myId = ref.watch(authRepositoryProvider).currentUser?.id;
-    final canManage =
-        myRole == ClanRole.leader || myRole == ClanRole.officer;
+    final canManage = myRole?.canKickMembers ?? false;
+    final canAssignRoles = myRole?.canAssignRoles ?? false;
+    final canDecideJoins = myRole == ClanRole.leader;
 
     return Scaffold(
       appBar: AppBar(
@@ -161,6 +163,45 @@ class ClanProfileScreen extends ConsumerWidget {
                   label: 'ЛИДЕР',
                   value: clan.leaderNickname ?? '—',
                 ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: myRole == ClanRole.leader
+                      ? () async {
+                          final selected = await showCityPicker(
+                            context,
+                            selected: clan.city,
+                          );
+                          if (selected == null || !context.mounted) return;
+                          try {
+                            await ref
+                                .read(clanRepositoryProvider)
+                                .updateClanInfo(
+                                  clanId: clanId,
+                                  city: selected,
+                                );
+                            await ref
+                                .read(clanDetailProvider(clanId).notifier)
+                                .refresh();
+                            ref.invalidate(myClanProvider);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(ErrorMapper.map(e))),
+                              );
+                            }
+                          }
+                        }
+                      : null,
+                  borderRadius: BorderRadius.circular(10),
+                  child: _StatTile(
+                    label: myRole == ClanRole.leader
+                        ? 'МЕСТОПОЛОЖЕНИЕ · ИЗМЕНИТЬ'
+                        : 'МЕСТОПОЛОЖЕНИЕ',
+                    value: (clan.city != null && clan.city!.trim().isNotEmpty)
+                        ? clan.city!.trim()
+                        : '—',
+                  ),
+                ),
                 if (clan.description.trim().isNotEmpty) ...[
                   const SizedBox(height: 14),
                   const SectionTitle(title: 'Описание'),
@@ -169,7 +210,7 @@ class ClanProfileScreen extends ConsumerWidget {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ],
-                if (canManage) ...[
+                if (canDecideJoins) ...[
                   const SizedBox(height: 16),
                   const SectionTitle(title: 'Заявки'),
                   _RequestsBlock(clanId: clanId),
@@ -199,7 +240,11 @@ class ClanProfileScreen extends ConsumerWidget {
                                 m.userId != myId &&
                                 m.role != ClanRole.leader &&
                                 !(myRole == ClanRole.officer &&
-                                    m.role == ClanRole.officer),
+                                    (m.role == ClanRole.officer ||
+                                        m.role == ClanRole.leader)),
+                            canAssignRole: canAssignRoles &&
+                                m.userId != myId &&
+                                m.role != ClanRole.leader,
                             onKick: () async {
                               try {
                                 await ref
@@ -209,6 +254,26 @@ class ClanProfileScreen extends ConsumerWidget {
                                 await ref
                                     .read(clanDetailProvider(clanId).notifier)
                                     .refresh();
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(ErrorMapper.map(e)),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            onAssignRole: (role) async {
+                              try {
+                                await ref
+                                    .read(clanRepositoryProvider)
+                                    .setMemberRole(
+                                      userId: m.userId,
+                                      role: role,
+                                    );
+                                ref.invalidate(clanMembersProvider(clanId));
+                                ref.invalidate(myClanRoleProvider(clanId));
                               } catch (e) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -252,28 +317,42 @@ class _JoinButton extends ConsumerWidget {
       );
     }
 
-    return AppButton(
-      label: 'Подать заявку',
-      onPressed: () async {
-        try {
-          await ref.read(clanRepositoryProvider).requestJoin(clanId);
-          ref.invalidate(myJoinStatusProvider(clanId));
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Заявка отправлена'),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(ErrorMapper.map(e))),
-            );
-          }
-        }
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppButton(
+          label: 'Подать заявку',
+          onPressed: () async {
+            try {
+              await ref.read(clanRepositoryProvider).requestJoin(clanId);
+              ref.invalidate(myJoinStatusProvider(clanId));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Заявка отправлена лидеру клана'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ErrorMapper.map(e))),
+                );
+              }
+            }
+          },
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Вступление только по заявке. Решение принимает создатель клана.',
+          style: TextStyle(
+            color: AppColors.textTertiary,
+            fontSize: 12.5,
+            height: 1.35,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -367,76 +446,115 @@ class _MemberRow extends StatelessWidget {
   const _MemberRow({
     required this.member,
     required this.canKick,
+    required this.canAssignRole,
     required this.onKick,
+    required this.onAssignRole,
   });
 
   final ClanMember member;
   final bool canKick;
+  final bool canAssignRole;
   final VoidCallback onKick;
+  final ValueChanged<ClanRole> onAssignRole;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.card,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push('/main/profile/user/${member.userId}'),
         borderRadius: BorderRadius.circular(AppRadii.card),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.surfaceElevated,
-            backgroundImage: member.avatarUrl != null
-                ? NetworkImage(member.avatarUrl!)
-                : null,
-            child: member.avatarUrl == null
-                ? Text(member.nickname[0].toUpperCase())
-                : null,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(AppRadii.card),
+            border: Border.all(color: AppColors.border),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  member.nickname,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  member.role.labelRu,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '${member.rating}',
-            style: const TextStyle(
-              color: AppColors.accent,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
-          ),
-          if (canKick)
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              onPressed: onKick,
-              icon: const Icon(
-                Icons.person_remove_outlined,
-                size: 18,
-                color: AppColors.danger,
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: AppColors.surfaceElevated,
+                backgroundImage: member.avatarUrl != null
+                    ? NetworkImage(member.avatarUrl!)
+                    : null,
+                child: member.avatarUrl == null
+                    ? Text(member.nickname[0].toUpperCase())
+                    : null,
               ),
-            ),
-        ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      member.nickname,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      member.role.labelRu,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${member.rating}',
+                style: const TextStyle(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              if (canAssignRole)
+                PopupMenuButton<ClanRole>(
+                  tooltip: 'Должность',
+                  onSelected: onAssignRole,
+                  itemBuilder: (context) => [
+                    for (final role in const [
+                      ClanRole.officer,
+                      ClanRole.trainer,
+                      ClanRole.member,
+                    ])
+                      PopupMenuItem(
+                        value: role,
+                        enabled: role != member.role,
+                        child: Text(role.labelRu),
+                      ),
+                  ],
+                  icon: const Icon(
+                    Icons.badge_outlined,
+                    size: 18,
+                    color: AppColors.accent,
+                  ),
+                ),
+              if (canKick)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onKick,
+                  icon: const Icon(
+                    Icons.person_remove_outlined,
+                    size: 18,
+                    color: AppColors.danger,
+                  ),
+                ),
+              if (!canKick && !canAssignRole)
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: AppColors.textTertiary,
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

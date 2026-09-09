@@ -84,6 +84,13 @@ class OrganizerHubScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             const SectionTitle(title: 'Быстрые действия'),
             _OrgTile(
+              icon: Icons.map_outlined,
+              title: 'Мои полигоны',
+              subtitle: 'Площадки и адреса на карте',
+              onTap: () => context.push('/main/profile/organizer/polygons'),
+            ),
+            const SizedBox(height: 8),
+            _OrgTile(
               icon: Icons.add_circle_outline,
               title: 'Создать мероприятие',
               subtitle: 'Новый ивент',

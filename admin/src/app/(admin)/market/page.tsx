@@ -11,12 +11,14 @@ import {
 } from "@/components/ui/page";
 import { fetchUsers } from "@/lib/api/admin";
 import {
+  boostListing,
   deleteListing,
   fetchCategories,
   fetchCities,
   fetchListingImages,
   fetchListings,
   setListingImages,
+  unboostListing,
   upsertListing,
   type ListingRow,
 } from "@/lib/api/content";
@@ -64,6 +66,16 @@ export default function MarketPage() {
     mutationFn: deleteListing,
     onSuccess: async () => {
       setMsg("Удалено");
+      await qc.invalidateQueries({ queryKey: ["admin-listings"] });
+    },
+    onError: (e: Error) => setMsg(e.message),
+  });
+
+  const boostMut = useMutation({
+    mutationFn: ({ id, unboost }: { id: string; unboost?: boolean }) =>
+      unboost ? unboostListing(id) : boostListing(id),
+    onSuccess: async (_row, vars) => {
+      setMsg(vars.unboost ? "Поднятие снято" : "Объявление поднято наверх");
       await qc.invalidateQueries({ queryKey: ["admin-listings"] });
     },
     onError: (e: Error) => setMsg(e.message),
@@ -217,13 +229,26 @@ export default function MarketPage() {
                   <td className="text-graphite-600">{formatDate(l.created_at)}</td>
                   <td>
                     {l.is_promoted ? (
-                      <Badge tone="blue">promo</Badge>
+                      <Badge tone="lime">в топе</Badge>
                     ) : (
                       "—"
                     )}
                   </td>
                   <td>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
+                      <Button
+                        variant="ghost"
+                        className="h-7 px-2 text-[12px]"
+                        disabled={boostMut.isPending}
+                        onClick={() =>
+                          boostMut.mutate({
+                            id: l.id,
+                            unboost: l.is_promoted,
+                          })
+                        }
+                      >
+                        {l.is_promoted ? "Снять" : "Поднять"}
+                      </Button>
                       <Button
                         variant="ghost"
                         className="h-7 px-2 text-[12px]"

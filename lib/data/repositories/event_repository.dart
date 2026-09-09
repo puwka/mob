@@ -22,6 +22,9 @@ class EventRepository {
     status,
     created_at,
     updated_at,
+    polygon_id,
+    latitude,
+    longitude,
     organizer:profiles!organizer_id(nickname)
   ''';
 
@@ -207,6 +210,9 @@ class EventRepository {
     required int maxParticipants,
     String? imageUrl,
     EventStatus status = EventStatus.active,
+    String? polygonId,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final result = await _client.rpc(
@@ -220,6 +226,9 @@ class EventRepository {
           'p_max_participants': maxParticipants,
           'p_image_url': imageUrl,
           'p_status': status.dbValue,
+          'p_polygon_id': polygonId,
+          'p_latitude': latitude,
+          'p_longitude': longitude,
         },
       );
       return result as String;
@@ -239,6 +248,23 @@ class EventRepository {
           .eq('id', eventId);
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
+    }
+  }
+
+  Future<void> deleteEvent(String eventId) async {
+    try {
+      final uid = _client.auth.currentUser?.id;
+      if (uid == null) throw const AppException('Требуется авторизация');
+
+      await _client
+          .from('events')
+          .delete()
+          .eq('id', eventId)
+          .eq('organizer_id', uid)
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw AppException(_mapEventError(e));
     }
   }
 
@@ -313,6 +339,11 @@ class EventRepository {
       return 'Нет доступа';
     }
     if (msg.contains('EVENT_NOT_FOUND')) return 'Мероприятие не найдено';
+    if (msg.contains('MAP_LOCATION_REQUIRED')) {
+      return 'Укажите точку на карте или выберите полигон';
+    }
+    if (msg.contains('INVALID_COORDINATES')) return 'Некорректные координаты';
+    if (msg.contains('POLYGON_NOT_FOUND')) return 'Полигон не найден';
     return ErrorMapper.map(e);
   }
 

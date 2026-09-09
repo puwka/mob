@@ -15,8 +15,6 @@ class MyListingsScreen extends ConsumerWidget {
   static const _tabs = <ListingStatus?>[
     ListingStatus.active,
     ListingStatus.pending,
-    ListingStatus.sold,
-    ListingStatus.archived,
   ];
 
   @override
@@ -123,15 +121,6 @@ class MyListingsScreen extends ConsumerWidget {
                             listing: item,
                             onEdit: () =>
                                 context.push('/main/market/${item.id}/edit'),
-                            onSold: () => ref
-                                .read(myListingsProvider.notifier)
-                                .setStatus(item.id, ListingStatus.sold),
-                            onArchive: () => ref
-                                .read(myListingsProvider.notifier)
-                                .setStatus(item.id, ListingStatus.archived),
-                            onActivate: () => ref
-                                .read(myListingsProvider.notifier)
-                                .setStatus(item.id, ListingStatus.active),
                             onDelete: () =>
                                 _confirmDelete(context, ref, item.id),
                           ),
@@ -181,17 +170,11 @@ class _ActionsRow extends StatelessWidget {
   const _ActionsRow({
     required this.listing,
     required this.onEdit,
-    required this.onSold,
-    required this.onArchive,
-    required this.onActivate,
     required this.onDelete,
   });
 
   final Listing listing;
   final VoidCallback onEdit;
-  final VoidCallback onSold;
-  final VoidCallback onArchive;
-  final VoidCallback onActivate;
   final VoidCallback onDelete;
 
   @override
@@ -199,14 +182,9 @@ class _ActionsRow extends StatelessWidget {
     return Wrap(
       spacing: 4,
       children: [
-        _Action(label: 'Изменить', onTap: onEdit),
-        if (listing.status == ListingStatus.active) ...[
-          _Action(label: 'Продано', onTap: onSold),
-          _Action(label: 'В архив', onTap: onArchive),
-        ],
-        if (listing.status == ListingStatus.archived ||
-            listing.status == ListingStatus.sold)
-          _Action(label: 'Активировать', onTap: onActivate),
+        if (listing.status == ListingStatus.active ||
+            listing.status == ListingStatus.pending)
+          _Action(label: 'Изменить', onTap: onEdit),
         _Action(label: 'Удалить', onTap: onDelete, danger: true),
       ],
     );

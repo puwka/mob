@@ -72,6 +72,9 @@ class Event {
     this.updatedAt,
     this.participantsCount = 0,
     this.isParticipating = false,
+    this.polygonId,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -89,6 +92,11 @@ class Event {
   final DateTime? updatedAt;
   final int participantsCount;
   final bool isParticipating;
+  final String? polygonId;
+  final double? latitude;
+  final double? longitude;
+
+  bool get hasMapPoint => latitude != null && longitude != null;
 
   int get slotsLeft =>
       (maxParticipants - participantsCount).clamp(0, maxParticipants);
@@ -115,6 +123,9 @@ class Event {
     String? organizerNickname,
     String? imageUrl,
     EventStatus? status,
+    String? polygonId,
+    double? latitude,
+    double? longitude,
   }) {
     return Event(
       id: id,
@@ -132,6 +143,9 @@ class Event {
       updatedAt: updatedAt,
       participantsCount: participantsCount ?? this.participantsCount,
       isParticipating: isParticipating ?? this.isParticipating,
+      polygonId: polygonId ?? this.polygonId,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 
@@ -184,6 +198,9 @@ class Event {
           : DateTime.parse(json['updated_at'] as String),
       participantsCount: count,
       isParticipating: isParticipating ?? false,
+      polygonId: json['polygon_id'] as String?,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
     );
   }
 }

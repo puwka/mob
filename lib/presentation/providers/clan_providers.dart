@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/clan.dart';
+import 'auth_providers.dart';
 import 'repository_providers.dart';
 
 final myClanProvider = AsyncNotifierProvider<MyClanNotifier, Clan?>(
@@ -10,14 +11,19 @@ final myClanProvider = AsyncNotifierProvider<MyClanNotifier, Clan?>(
 class MyClanNotifier extends AsyncNotifier<Clan?> {
   @override
   Future<Clan?> build() {
-    return ref.read(clanRepositoryProvider).fetchMyClan();
+    ref.watch(authStateProvider);
+    final userId = ref.watch(supabaseClientProvider).auth.currentUser?.id;
+    if (userId == null) return Future.value(null);
+    return ref.read(clanRepositoryProvider).fetchClanForUser(userId);
   }
 
   Future<void> refresh({bool silent = false}) async {
     if (!silent) state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(clanRepositoryProvider).fetchMyClan(),
-    );
+    state = await AsyncValue.guard(() async {
+      final userId = ref.read(supabaseClientProvider).auth.currentUser?.id;
+      if (userId == null) return null;
+      return ref.read(clanRepositoryProvider).fetchClanForUser(userId);
+    });
   }
 }
 

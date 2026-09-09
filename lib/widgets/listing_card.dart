@@ -28,12 +28,15 @@ class ListingCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.card),
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.card,
+            color: listing.isPromotionActive
+                ? AppColors.accentSoft
+                : AppColors.card,
             borderRadius: BorderRadius.circular(AppRadii.card),
             border: Border.all(
               color: listing.isPromotionActive
-                  ? AppColors.accent.withValues(alpha: 0.45)
+                  ? AppColors.accent
                   : AppColors.border,
+              width: listing.isPromotionActive ? 1.5 : 1,
             ),
           ),
           clipBehavior: Clip.antiAlias,
@@ -44,29 +47,58 @@ class ListingCard extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 96,
-                  child: cover == null || cover.isEmpty
-                      ? Container(
-                          color: AppColors.surfaceElevated,
-                          child: const Icon(
-                            Icons.image_outlined,
-                            color: AppColors.textTertiary,
-                            size: 22,
-                          ),
-                        )
-                      : Image.network(
-                          cover,
-                          fit: BoxFit.cover,
-                          gaplessPlayback: true,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                            color: AppColors.surfaceElevated,
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              color: AppColors.textTertiary,
-                              size: 20,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      cover == null || cover.isEmpty
+                          ? Container(
+                              color: AppColors.surfaceElevated,
+                              child: const Icon(
+                                Icons.image_outlined,
+                                color: AppColors.textTertiary,
+                                size: 22,
+                              ),
+                            )
+                          : Image.network(
+                              cover,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                color: AppColors.surfaceElevated,
+                                child: const Icon(
+                                  Icons.broken_image_outlined,
+                                  color: AppColors.textTertiary,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                      if (listing.isPromotionActive)
+                        Positioned(
+                          left: 6,
+                          top: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'ТОП',
+                              style: TextStyle(
+                                color: AppColors.background,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3,
+                              ),
                             ),
                           ),
                         ),
+                    ],
+                  ),
                 ),
                 Expanded(
                   child: Stack(

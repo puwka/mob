@@ -156,6 +156,7 @@ class ClanRepository {
     required String name,
     required String tag,
     required String description,
+    required String city,
     String? avatarUrl,
   }) async {
     try {
@@ -166,9 +167,30 @@ class ClanRepository {
           'p_tag': tag,
           'p_description': description,
           'p_avatar_url': avatarUrl,
+          'p_city': city,
         },
       );
       return id as String;
+    } catch (e) {
+      throw AppException(_map(e));
+    }
+  }
+
+  Future<Clan> updateClanInfo({
+    required String clanId,
+    String? city,
+    String? description,
+  }) async {
+    try {
+      final row = await _client.rpc(
+        'update_clan_info',
+        params: {
+          'p_clan_id': clanId,
+          'p_city': city,
+          'p_description': description,
+        },
+      );
+      return Clan.fromJson(Map<String, dynamic>.from(row as Map));
     } catch (e) {
       throw AppException(_map(e));
     }
@@ -308,6 +330,27 @@ class ClanRepository {
     }
   }
 
+  Future<void> setMemberRole({
+    required String userId,
+    required ClanRole role,
+  }) async {
+    try {
+      if (role == ClanRole.leader) {
+        throw const AppException('Нельзя назначить командира');
+      }
+      await _client.rpc(
+        'set_clan_member_role',
+        params: {
+          'p_user_id': userId,
+          'p_role': role.dbValue,
+        },
+      ).timeout(const Duration(seconds: 12));
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw AppException(_map(e));
+    }
+  }
+
   String _map(Object e) {
     final raw = e.toString().toUpperCase();
     if (raw.contains('NAME_TAKEN')) return 'Название клана уже занято';
@@ -316,10 +359,18 @@ class ClanRepository {
     if (raw.contains('INVALID_TAG')) {
       return 'TAG: 2–6 символов (A-Z, 0-9)';
     }
+    if (raw.contains('LEVEL_TOO_LOW')) {
+      return 'Создать клан можно с 3 уровня';
+    }
     if (raw.contains('ALREADY_IN_CLAN')) {
       return 'Вы уже состоите в клане';
     }
     if (raw.contains('NOT_IN_CLAN')) return 'Вы не состоите в клане';
+    if (raw.contains('INVALID_CLAN_ROLE')) return 'Некорректная должность';
+    if (raw.contains('INVALID_CITY')) return 'Укажите местоположение клана';
+    if (raw.contains('NOT_CLAN_LEADER')) {
+      return 'Только командир может менять данные клана';
+    }
     if (raw.contains('NOT_ALLOWED')) return 'Недостаточно прав';
     if (raw.contains('CLAN_NOT_FOUND')) return 'Клан не найден';
     if (raw.contains('REQUEST_NOT_FOUND')) return 'Заявка не найдена';

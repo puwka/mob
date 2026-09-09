@@ -26,8 +26,10 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
     final photos = ref.read(myProfilePhotosProvider).valueOrNull ?? const [];
     if (photos.length >= ProfilePhotoRepository.maxPhotos) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Можно загрузить максимум 4 фото'),
+        SnackBar(
+          content: Text(
+            'Можно загрузить максимум ${ProfilePhotoRepository.maxPhotos} фото',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -110,6 +112,7 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(myProfilePhotosProvider);
+    const max = ProfilePhotoRepository.maxPhotos;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -134,109 +137,115 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
               ),
             ),
             data: (photos) {
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                children: [
-                  Text(
-                    '${photos.length} / ${ProfilePhotoRepository.maxPhotos}',
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${photos.length} / $max',
+                      style: const TextStyle(
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Максимум 4 фото в профиле',
-                    style: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 12,
+                    const SizedBox(height: 4),
+                    Text(
+                      'Максимум $max фото в профиле',
+                      style: const TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: ProfilePhotoRepository.maxPhotos,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                    ),
-                    itemBuilder: (context, index) {
-                      if (index < photos.length) {
-                        final photo = photos[index];
-                        return AppCard(
-                          padding: EdgeInsets.zero,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              ClipRRect(
-                                borderRadius:
-                                    BorderRadius.circular(AppRadii.card - 1),
-                                child: Image.network(
-                                  photo.url,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                              Positioned(
-                                top: 6,
-                                right: 6,
-                                child: Material(
-                                  color: AppColors.scrim,
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: InkWell(
-                                    onTap: _busy
-                                        ? null
-                                        : () => _delete(photo.id, photo.url),
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(6),
-                                      child: Icon(
-                                        Icons.delete_outline,
-                                        size: 16,
-                                        color: AppColors.textPrimary,
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: GridView.builder(
+                        itemCount: max,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                          childAspectRatio: 0.85,
+                        ),
+                        itemBuilder: (context, index) {
+                          if (index < photos.length) {
+                            final photo = photos[index];
+                            return AppCard(
+                              padding: EdgeInsets.zero,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.card - 1,
+                                    ),
+                                    child: Image.network(
+                                      photo.url,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 6,
+                                    right: 6,
+                                    child: Material(
+                                      color: AppColors.scrim,
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: InkWell(
+                                        onTap: _busy
+                                            ? null
+                                            : () =>
+                                                _delete(photo.id, photo.url),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(6),
+                                          child: Icon(
+                                            Icons.delete_outline,
+                                            size: 16,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return AppCard(
+                            onTap: _busy ? null : _add,
+                            padding: EdgeInsets.zero,
+                            child: const ColoredBox(
+                              color: AppColors.surfaceElevated,
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.add,
+                                      color: AppColors.accent,
+                                      size: 22,
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Добавить',
+                                      style: TextStyle(
+                                        color: AppColors.textTertiary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return AppCard(
-                        onTap: _busy ? null : _add,
-                        padding: EdgeInsets.zero,
-                        child: const ColoredBox(
-                          color: AppColors.surfaceElevated,
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.add,
-                                  color: AppColors.accent,
-                                  size: 22,
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Добавить',
-                                  style: TextStyle(
-                                    color: AppColors.textTertiary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
                             ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               );
             },
           ),

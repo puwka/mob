@@ -46,9 +46,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           password: _password.text,
         );
 
-    final state = ref.read(authControllerProvider);
     if (!mounted) return;
 
+    final state = ref.read(authControllerProvider);
     if (state.hasError) {
       setState(() => _formError = ErrorMapper.map(state.error!));
       return;

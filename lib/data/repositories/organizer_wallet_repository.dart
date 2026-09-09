@@ -87,6 +87,101 @@ class OrganizerWalletRepository {
     }
   }
 
+  Future<num> fetchMinWithdrawalAmount() async {
+    try {
+      final row = await _client
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'min_withdrawal_amount')
+          .maybeSingle();
+      return num.tryParse('${row?['value']}') ?? 100;
+    } catch (_) {
+      return 100;
+    }
+  }
+
+  Future<num> fetchWithdrawalFee() async {
+    try {
+      final row = await _client
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'withdrawal_fee')
+          .maybeSingle();
+      return num.tryParse('${row?['value']}') ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<List<OrganizerWithdrawalRequest>> fetchMyWithdrawals({
+    int limit = 20,
+  }) async {
+    try {
+      final uid = _client.auth.currentUser?.id;
+      if (uid == null) return const [];
+
+      final rows = await _client
+          .from('organizer_withdrawal_requests')
+          .select()
+          .eq('organizer_id', uid)
+          .order('created_at', ascending: false)
+          .limit(limit)
+          .timeout(const Duration(seconds: 12));
+
+      return [
+        for (final raw in rows as List)
+          OrganizerWithdrawalRequest.fromJson(
+            Map<String, dynamic>.from(raw as Map),
+          ),
+      ];
+    } catch (e) {
+      throw AppException(ErrorMapper.map(e));
+    }
+  }
+
+  Future<OrganizerWithdrawalRequest> requestWithdrawal({
+    required num amount,
+    required String paymentDetails,
+  }) async {
+    try {
+      final row = await _client.rpc(
+        'request_organizer_withdrawal',
+        params: {
+          'p_amount': amount,
+          'p_payment_details': paymentDetails.trim(),
+        },
+      );
+      return OrganizerWithdrawalRequest.fromJson(
+        Map<String, dynamic>.from(row as Map),
+      );
+    } catch (e) {
+      throw AppException(_mapWithdrawalError(e));
+    }
+  }
+
+  String _mapWithdrawalError(Object e) {
+    final raw = e.toString().toUpperCase();
+    if (raw.contains('INSUFFICIENT_BALANCE')) {
+      return 'Недостаточно средств на балансе';
+    }
+    if (raw.contains('PENDING_EXISTS')) {
+      return 'У вас уже есть заявка на проверке';
+    }
+    if (raw.contains('AMOUNT_TOO_LOW')) {
+      return 'Сумма меньше минимальной для вывода';
+    }
+    if (raw.contains('INVALID_PAYMENT_DETAILS')) {
+      return 'Укажите реквизиты для выплаты (минимум 5 символов)';
+    }
+    if (raw.contains('INVALID_AMOUNT')) {
+      return 'Укажите корректную сумму';
+    }
+    if (raw.contains('NOT_ORGANIZER')) {
+      return 'Вывод доступен только организаторам';
+    }
+    return ErrorMapper.map(e);
+  }
+
   String? _nicknameFromDescription(String desc) {
     // "Подтверждение: Voron · Стальной щит"
     final prefix = 'Подтверждение: ';

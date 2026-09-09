@@ -7,8 +7,10 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/presence.dart';
 import '../../../domain/models/conversation.dart';
+import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/clan_providers.dart';
+import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/presence_status.dart';
 
@@ -22,6 +24,10 @@ class DialogsScreen extends ConsumerWidget {
     final myClan = ref.watch(myClanProvider).valueOrNull;
     final personalAsync =
         ref.watch(conversationsByTypeProvider(ConversationType.user));
+    final cityChat = ref
+        .watch(conversationsByTypeProvider(ConversationType.city))
+        .valueOrNull
+        ?.firstOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -68,6 +74,15 @@ class DialogsScreen extends ConsumerWidget {
                                 .notifier,
                           )
                           .refresh();
+                      try {
+                        await ref.read(chatRepositoryProvider).openCityChat();
+                      } catch (_) {}
+                      await ref
+                          .read(
+                            conversationsByTypeProvider(ConversationType.city)
+                                .notifier,
+                          )
+                          .refresh(silent: true);
                       await ref
                           .read(folderUnreadProvider.notifier)
                           .refresh(silent: true);
@@ -93,6 +108,19 @@ class DialogsScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 6),
                         _FolderTile(
+                          title: ConversationType.dating.folderLabel,
+                          subtitle: _folderSubtitle(
+                            unread: unreadMap[ConversationType.dating] ?? 0,
+                            emptyHint: 'Чаты после совпадений',
+                          ),
+                          meta: 'Папка',
+                          icon: Icons.groups_outlined,
+                          unread: unreadMap[ConversationType.dating] ?? 0,
+                          onTap: () =>
+                              context.go('/main/chats/folder/dating'),
+                        ),
+                        const SizedBox(height: 6),
+                        _FolderTile(
                           title: ConversationType.clan.folderLabel,
                           subtitle: myClan?.name ??
                               _folderSubtitle(
@@ -105,6 +133,15 @@ class DialogsScreen extends ConsumerWidget {
                           unread: unreadMap[ConversationType.clan] ?? 0,
                           onTap: () => context.go('/main/chats/folder/clan'),
                         ),
+                        if (cityChat != null) ...[
+                          const SizedBox(height: 6),
+                          _DialogTile(
+                            item: cityChat,
+                            leadingOverride: _cityChatIcon(),
+                            onTap: () =>
+                                context.go('/main/chats/${cityChat.id}'),
+                          ),
+                        ],
                         const SizedBox(height: 6),
                         if (items.isEmpty) ...[
                           const SizedBox(height: 24),
@@ -121,6 +158,11 @@ class DialogsScreen extends ConsumerWidget {
                               item: items[i],
                               onTap: () =>
                                   context.go('/main/chats/${items[i].id}'),
+                              onConfirmDelete: () => _confirmHideDialog(
+                                context,
+                                ref,
+                                items[i],
+                              ),
                             ),
                           ],
                         ],
@@ -157,6 +199,9 @@ class ChatFolderScreen extends ConsumerWidget {
     final myClan = type == ConversationType.clan
         ? ref.watch(myClanProvider).valueOrNull
         : null;
+    final myCity = type == ConversationType.city
+        ? ref.watch(currentProfileProvider).valueOrNull?.city.trim()
+        : null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -165,7 +210,11 @@ class ChatFolderScreen extends ConsumerWidget {
         title: Text(
           type == ConversationType.clan && myClan != null
               ? myClan.name
-              : type.folderLabel,
+              : type == ConversationType.city &&
+                      myCity != null &&
+                      myCity.isNotEmpty
+                  ? myCity
+                  : type.folderLabel,
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -198,7 +247,11 @@ class ChatFolderScreen extends ConsumerWidget {
                   title: 'Нет диалогов',
                   subtitle: type == ConversationType.market
                       ? 'Нажмите «Написать» на объявлении.'
-                      : 'Вступите в клан, чтобы открыть чаты.',
+                      : type == ConversationType.dating
+                          ? 'Совпадения из Знакомств появятся здесь.'
+                          : type == ConversationType.city
+                              ? 'Укажите город в профиле — чат откроется автоматически.'
+                              : 'Вступите в клан, чтобы открыть чаты.',
                   icon: Icons.chat_bubble_outline,
                 ),
               ],
@@ -221,6 +274,12 @@ class ChatFolderScreen extends ConsumerWidget {
                   onTap: () => context.go('/main/chats/${item.id}'),
                   leadingOverride: type == ConversationType.clan
                       ? _clanChannelIcon(item)
+                      : type == ConversationType.city
+                          ? _cityChatIcon()
+                          : null,
+                  onConfirmDelete: (type == ConversationType.market ||
+                          type == ConversationType.dating)
+                      ? () => _confirmHideDialog(context, ref, item)
                       : null,
                 );
               },
@@ -242,6 +301,59 @@ class ChatFolderScreen extends ConsumerWidget {
         size: 22,
       ),
     );
+  }
+}
+
+Widget _cityChatIcon() {
+  return const CircleAvatar(
+    radius: 22,
+    backgroundColor: AppColors.surfaceElevated,
+    child: Icon(
+      Icons.location_city_outlined,
+      color: AppColors.accent,
+      size: 22,
+    ),
+  );
+}
+
+Future<bool> _confirmHideDialog(
+  BuildContext context,
+  WidgetRef ref,
+  ConversationPreview item,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Удалить диалог?'),
+      content: const Text(
+        'Диалог исчезнет из списка. История сохранится — '
+        'чат появится снова, если кто-то напишет.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Отмена'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Удалить'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return false;
+  try {
+    await ref.read(chatRepositoryProvider).hideConversation(item.id);
+    ref.invalidate(conversationsByTypeProvider(item.type));
+    ref.invalidate(folderUnreadProvider);
+    return true;
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ErrorMapper.map(e))),
+      );
+    }
+    return false;
   }
 }
 
@@ -391,11 +503,13 @@ class _DialogTile extends StatelessWidget {
     required this.item,
     required this.onTap,
     this.leadingOverride,
+    this.onConfirmDelete,
   });
 
   final ConversationPreview item;
   final VoidCallback onTap;
   final Widget? leadingOverride;
+  final Future<bool> Function()? onConfirmDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -405,10 +519,11 @@ class _DialogTile extends StatelessWidget {
         ? item.displayTitle[0].toUpperCase()
         : '?';
     final showPresence = item.type == ConversationType.user ||
+        item.type == ConversationType.dating ||
         (item.type == ConversationType.market && item.peerUserId != null);
     final online = Presence.isOnline(item.peerLastSeenAt);
 
-    return Material(
+    final tile = Material(
       color: AppColors.card,
       borderRadius: BorderRadius.circular(AppRadii.card),
       child: InkWell(
@@ -551,6 +666,25 @@ class _DialogTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    final onDelete = onConfirmDelete;
+    if (onDelete == null) return tile;
+
+    return Dismissible(
+      key: ValueKey('hide-${item.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) => onDelete(),
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          color: AppColors.danger.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(AppRadii.card),
+        ),
+        child: const Icon(Icons.delete_outline, color: AppColors.danger),
+      ),
+      child: tile,
     );
   }
 

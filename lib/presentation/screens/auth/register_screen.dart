@@ -8,7 +8,7 @@ import '../../../core/utils/validators.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_text_field.dart';
-import '../../../widgets/city_picker.dart';
+import '../../../widgets/city_select_field.dart';
 import '../../../widgets/feedback.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -40,13 +40,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _password.dispose();
     _confirm.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickCity() async {
-    final city = await showCityPicker(context, selected: _city.text);
-    if (city != null) {
-      setState(() => _city.text = city);
-    }
   }
 
   Future<bool> _ensureNicknameUnique() async {
@@ -97,9 +90,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           password: _password.text,
         );
 
-    final state = ref.read(authControllerProvider);
     if (!mounted) return;
 
+    final state = ref.read(authControllerProvider);
     if (state.hasError) {
       setState(() => _formError = ErrorMapper.map(state.error!));
       return;
@@ -171,18 +164,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    AppTextField(
+                    CitySelectField(
                       controller: _city,
-                      label: 'Город',
-                      hint: 'Выберите из списка',
-                      readOnly: true,
-                      prefixIcon: Icons.location_city_outlined,
-                      validator: Validators.city,
-                      onTap: loading ? null : _pickCity,
-                      suffix: const Icon(
-                        Icons.expand_more,
-                        color: AppColors.textTertiary,
-                      ),
+                      enabled: !loading,
                     ),
                     const SizedBox(height: 12),
                     AppTextField(

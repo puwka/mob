@@ -8,36 +8,56 @@ import {
   LoadingBlock,
   PageHeader,
 } from "@/components/ui/page";
+import { usePermissions } from "@/hooks/use-permissions";
 import {
   deleteConversation,
+  fetchConversationMutes,
   fetchConversations,
   fetchMessages,
+  muteCityUser,
   setConversationStatus,
   softDeleteMessage,
+  unmuteCityUser,
   type ConversationRow,
 } from "@/lib/api/final";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const TYPE_LABEL: Record<string, string> = {
   market: "Барахолка",
   clan: "Кланы",
   user: "Пользователи",
+  city: "Города",
 };
 
 export default function ChatsPage() {
   const qc = useQueryClient();
-  const [type, setType] = useState("");
+  const { can } = usePermissions();
+  const cityOnly = can("dialogs") && !can("market") && !can("users");
+  const [type, setType] = useState(cityOnly ? "city" : "");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ConversationRow | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [muteMinutes, setMuteMinutes] = useState("60");
+  const [muteReason, setMuteReason] = useState("");
+
+  useEffect(() => {
+    if (cityOnly) setType("city");
+  }, [cityOnly]);
+
+  const effectiveType = cityOnly ? "city" : type;
+
+  const typeFilters = useMemo(
+    () => (cityOnly ? ["city"] : ["", "market", "clan", "user", "city"]),
+    [cityOnly],
+  );
 
   const listQ = useQuery({
-    queryKey: ["admin-conversations", type, search],
+    queryKey: ["admin-conversations", effectiveType, search],
     queryFn: () =>
       fetchConversations({
-        type: type || undefined,
+        type: effectiveType || undefined,
         search: search.trim() || undefined,
       }),
   });
@@ -48,12 +68,19 @@ export default function ChatsPage() {
     enabled: !!selected,
   });
 
+  const mutesQ = useQuery({
+    queryKey: ["admin-mutes", selected?.id],
+    queryFn: () => fetchConversationMutes(selected!.id),
+    enabled: !!selected && selected.type === "city",
+  });
+
   const mut = useMutation({
     mutationFn: async (fn: () => Promise<unknown>) => fn(),
     onSuccess: async () => {
       setMsg("Готово");
       await qc.invalidateQueries({ queryKey: ["admin-conversations"] });
       await qc.invalidateQueries({ queryKey: ["admin-messages"] });
+      await qc.invalidateQueries({ queryKey: ["admin-mutes"] });
       await qc.invalidateQueries({ queryKey: ["admin-audit-logs"] });
     },
     onError: (e: Error) => setMsg(e.message),
@@ -63,7 +90,11 @@ export default function ChatsPage() {
     <div>
       <PageHeader
         title="Диалоги"
-        description="Модерация переписок (доступ только с permission dialogs, действия в audit log)"
+        description={
+          cityOnly
+            ? "Модератор: только городские чаты, мут пользователей и удаление сообщений"
+            : "Модерация переписок (доступ только с permission dialogs, действия в audit log)"
+        }
       />
       {msg ? (
         <div className="mb-3 rounded border border-graphite-700 px-3 py-2 text-sm text-lime">
@@ -72,11 +103,12 @@ export default function ChatsPage() {
       ) : null}
 
       <div className="mb-4 flex flex-wrap gap-2">
-        {["", "market", "clan", "user"].map((t) => (
+        {typeFilters.map((t) => (
           <Button
             key={t || "all"}
-            variant={type === t ? "primary" : "ghost"}
-            onClick={() => setType(t)}
+            variant={effectiveType === t ? "primary" : "ghost"}
+            onClick={() => !cityOnly && setType(t)}
+            disabled={cityOnly && t !== "city"}
           >
             {t ? TYPE_LABEL[t] : "Все"}
           </Button>
@@ -169,54 +201,115 @@ export default function ChatsPage() {
                 <div className="min-w-0 flex-1 text-sm text-white">
                   {selected.member_names ?? selected.title ?? selected.id}
                 </div>
-                <Button
-                  variant="ghost"
-                  className="h-7 text-[12px]"
-                  onClick={() =>
-                    mut.mutate(() =>
-                      setConversationStatus(selected.id, "blocked"),
-                    )
-                  }
-                >
-                  Блок
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="h-7 text-[12px]"
-                  onClick={() =>
-                    mut.mutate(() =>
-                      setConversationStatus(selected.id, "archived"),
-                    )
-                  }
-                >
-                  Архив
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="h-7 text-[12px]"
-                  onClick={() =>
-                    mut.mutate(() =>
-                      setConversationStatus(selected.id, "active"),
-                    )
-                  }
-                >
-                  Активен
-                </Button>
-                <Button
-                  variant="danger"
-                  className="h-7 text-[12px]"
-                  onClick={() => {
-                    if (confirm("Удалить диалог полностью?")) {
-                      mut.mutate(async () => {
-                        await deleteConversation(selected.id);
-                        setSelected(null);
-                      });
-                    }
-                  }}
-                >
-                  Удалить
-                </Button>
+                {!cityOnly ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      className="h-7 text-[12px]"
+                      onClick={() =>
+                        mut.mutate(() =>
+                          setConversationStatus(selected.id, "blocked"),
+                        )
+                      }
+                    >
+                      Блок
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-7 text-[12px]"
+                      onClick={() =>
+                        mut.mutate(() =>
+                          setConversationStatus(selected.id, "archived"),
+                        )
+                      }
+                    >
+                      Архив
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-7 text-[12px]"
+                      onClick={() =>
+                        mut.mutate(() =>
+                          setConversationStatus(selected.id, "active"),
+                        )
+                      }
+                    >
+                      Активен
+                    </Button>
+                    <Button
+                      variant="danger"
+                      className="h-7 text-[12px]"
+                      onClick={() => {
+                        if (confirm("Удалить диалог полностью?")) {
+                          mut.mutate(async () => {
+                            await deleteConversation(selected.id);
+                            setSelected(null);
+                          });
+                        }
+                      }}
+                    >
+                      Удалить
+                    </Button>
+                  </>
+                ) : null}
               </div>
+
+              {selected.type === "city" ? (
+                <div className="space-y-2 border-b border-graphite-700 px-3 py-2">
+                  <div className="text-[12px] font-medium text-lime">Муты</div>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      className="admin-input w-24"
+                      value={muteMinutes}
+                      onChange={(e) => setMuteMinutes(e.target.value)}
+                      placeholder="мин"
+                      title="Минуты (пусто = бессрочно)"
+                    />
+                    <input
+                      className="admin-input min-w-[140px] flex-1"
+                      value={muteReason}
+                      onChange={(e) => setMuteReason(e.target.value)}
+                      placeholder="Причина"
+                    />
+                  </div>
+                  {(mutesQ.data ?? []).length ? (
+                    <div className="space-y-1">
+                      {(mutesQ.data ?? []).map((m) => (
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between gap-2 text-[12px] text-graphite-600"
+                        >
+                          <span className="text-white">
+                            {m.nickname ?? m.user_id}
+                            {m.muted_until
+                              ? ` до ${formatDate(m.muted_until)}`
+                              : " бессрочно"}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            className="h-6 px-2 text-[11px]"
+                            onClick={() =>
+                              mut.mutate(() =>
+                                unmuteCityUser({
+                                  conversationId: selected.id,
+                                  userId: m.user_id,
+                                }),
+                              )
+                            }
+                          >
+                            Снять
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-graphite-600">
+                      Активных мутов нет — выберите отправителя ниже
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
               <div className="flex-1 space-y-2 overflow-y-auto p-3">
                 {messagesQ.isLoading ? <LoadingBlock /> : null}
                 {(messagesQ.data ?? []).map((m) => (
@@ -241,17 +334,40 @@ export default function ChatsPage() {
                         {m.text}
                       </p>
                     )}
-                    {!m.deleted_at ? (
-                      <Button
-                        variant="ghost"
-                        className="mt-1 h-6 px-2 text-[11px]"
-                        onClick={() =>
-                          mut.mutate(() => softDeleteMessage(m.id))
-                        }
-                      >
-                        Удалить сообщение
-                      </Button>
-                    ) : null}
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {!m.deleted_at ? (
+                        <Button
+                          variant="ghost"
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() =>
+                            mut.mutate(() => softDeleteMessage(m.id))
+                          }
+                        >
+                          Удалить сообщение
+                        </Button>
+                      ) : null}
+                      {selected.type === "city" ? (
+                        <Button
+                          variant="ghost"
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => {
+                            const mins = Number.parseInt(muteMinutes, 10);
+                            mut.mutate(() =>
+                              muteCityUser({
+                                conversationId: selected.id,
+                                userId: m.sender_id,
+                                minutes: Number.isFinite(mins) && mins > 0
+                                  ? mins
+                                  : null,
+                                reason: muteReason.trim() || undefined,
+                              }),
+                            );
+                          }}
+                        >
+                          Мут
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
                 {!messagesQ.isLoading && !(messagesQ.data?.length) ? (

@@ -8,7 +8,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/clan.dart';
 import '../../../presentation/providers/clan_providers.dart';
+import '../../../presentation/providers/profile_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
+import '../../../services/level_service.dart';
 import '../../../widgets/feedback.dart';
 
 class ClanSearchScreen extends ConsumerStatefulWidget {
@@ -33,6 +35,9 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
   Widget build(BuildContext context) {
     final async = ref.watch(clanSearchProvider);
     final myClan = ref.watch(myClanProvider).valueOrNull;
+    final level = ref.watch(levelProgressProvider).currentLevel;
+    final canCreateClan = myClan == null &&
+        level >= LevelService.minLevelToCreateClan;
 
     return Scaffold(
       appBar: AppBar(
@@ -40,8 +45,29 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
         actions: [
           if (myClan == null)
             TextButton(
-              onPressed: () => context.push('/main/profile/clan/create'),
-              child: const Text('Создать'),
+              onPressed: () {
+                if (!canCreateClan) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Создать клан можно с ${LevelService.minLevelToCreateClan} уровня '
+                        '(сейчас $level)',
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                context.push('/main/profile/clan/create');
+              },
+              child: Text(
+                'Создать',
+                style: TextStyle(
+                  color: canCreateClan
+                      ? null
+                      : AppColors.textTertiary,
+                ),
+              ),
             ),
         ],
       ),
@@ -118,7 +144,7 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Заявка отправлена'),
+          content: Text('Заявка отправлена лидеру клана'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -189,7 +215,12 @@ class _ClanCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Рейтинг ${clan.rating} · ${clan.membersCount} уч.',
+                      [
+                        if (clan.city != null && clan.city!.trim().isNotEmpty)
+                          clan.city!.trim(),
+                        'Рейтинг ${clan.rating}',
+                        '${clan.membersCount} уч.',
+                      ].join(' · '),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,

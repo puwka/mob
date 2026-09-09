@@ -23,6 +23,10 @@ abstract final class AppColors {
   static const Color danger = Color(0xFFE25B5B);
   static const Color dangerMuted = Color(0x28E25B5B);
   static const Color warning = Color(0xFFD4A017);
+  static const Color roleAdmin = Color(0xFFE25B5B);
+  static const Color roleModerator = Color(0xFFC9A227);
+  static const Color roleOrganizer = Color(0xFFA4C639);
+  static const Color roleUser = Color(0xFF4B8BDB);
   static const Color gold = Color(0xFFC9A227);
   static const Color silver = Color(0xFFA8ADB4);
   static const Color bronze = Color(0xFFB07A3A);

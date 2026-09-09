@@ -133,6 +133,7 @@ export type ClanRow = {
   tag: string;
   avatar_url: string | null;
   description: string;
+  city: string | null;
   leader_id: string | null;
   leader_nickname: string | null;
   members_count: number;
@@ -166,6 +167,7 @@ export const upsertClan = (p: Record<string, unknown>) =>
     p_avatar_url: p.avatarUrl ?? null,
     p_clear_avatar: p.clearAvatar ?? false,
     p_leader_id: p.leaderId ?? null,
+    p_city: p.city ?? null,
   });
 
 export const deleteClan = (id: string) =>
@@ -286,6 +288,16 @@ export const upsertListing = (p: Record<string, unknown>) =>
     p_rejection_reason: p.rejectionReason ?? null,
     p_clear_rejection: p.clearRejection ?? false,
   });
+
+/** Raise listing to top of feed (indefinite promo unless days set). */
+export const boostListing = (id: string, days?: number | null) =>
+  rpc<ListingRow>("admin_boost_listing", {
+    p_id: id,
+    p_days: days ?? null,
+  });
+
+export const unboostListing = (id: string) =>
+  rpc<ListingRow>("admin_unboost_listing", { p_id: id });
 
 export const deleteListing = (id: string) =>
   rpc<void>("admin_delete_listing", { p_id: id });

@@ -100,4 +100,22 @@ class AchievementRepository {
       newlyUnlocked: newlyUnlocked,
     );
   }
+
+  /// Read-only progress for any user (no DB upsert).
+  Future<List<UserAchievementProgress>> loadProgress({
+    required Profile profile,
+    required int eventsCount,
+  }) async {
+    final achievements = await fetchCatalog();
+    final existingRows = await fetchUserRecords(profile.id);
+    final existing = {
+      for (final row in existingRows) row.achievementId: row,
+    };
+    return _service.evaluate(
+      profile: profile,
+      catalog: achievements,
+      eventsCount: eventsCount,
+      existing: existing,
+    );
+  }
 }

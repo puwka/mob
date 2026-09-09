@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/app_exception.dart';
+import '../../domain/models/conversation.dart';
 import '../../domain/models/profile.dart';
 import '../../domain/models/profile_photo.dart';
 import '../../domain/models/user_achievement_progress.dart';
 import '../../services/level_service.dart';
 import 'auth_providers.dart';
+import 'chat_providers.dart';
 import 'repository_providers.dart';
 
 final profilePhotosProvider =
@@ -24,6 +27,46 @@ final myProfilePhotosProvider = FutureProvider<List<ProfilePhoto>>((ref) {
 final profileByIdProvider =
     FutureProvider.family<Profile?, String>((ref, userId) {
   return ref.watch(profileRepositoryProvider).getByIdOrNull(userId);
+});
+
+/// Level bar for any profile (same formula as own passport).
+final levelProgressForProfileProvider =
+    Provider.family<LevelProgress, Profile>((ref, profile) {
+  final events =
+      ref.watch(userEventsCountByIdProvider(profile.id)).valueOrNull ?? 0;
+  return ref.watch(levelServiceProvider).calculateFromProfile(
+        profile,
+        eventsCount: events,
+      );
+});
+
+/// Achievements preview for any user (read-only evaluate).
+final userAchievementsByIdProvider = FutureProvider.family<
+    List<UserAchievementProgress>, String>((ref, userId) async {
+  final profile = await ref.watch(profileByIdProvider(userId).future);
+  if (profile == null) return const [];
+  final events =
+      await ref.watch(userEventsCountByIdProvider(userId).future);
+  return ref.read(achievementRepositoryProvider).loadProgress(
+        profile: profile,
+        eventsCount: events,
+      );
+});
+
+/// Event participations for any user (XP formula).
+final userEventsCountByIdProvider =
+    FutureProvider.family<int, String>((ref, userId) {
+  return ref.watch(eventRepositoryProvider).getUserEventsCount(userId);
+});
+
+/// Live XP for a profile (same formula as ranking / level bar).
+final profileXpProvider = Provider.family<int, Profile>((ref, profile) {
+  final events =
+      ref.watch(userEventsCountByIdProvider(profile.id)).valueOrNull ?? 0;
+  return ref.watch(xpServiceProvider).calculateFromProfile(
+        profile,
+        eventsCount: events,
+      );
 });
 
 /// Live count of `event_participants` rows for the current user.
@@ -152,6 +195,12 @@ class ProfileController extends AsyncNotifier<void> {
 
       ref.read(currentProfileProvider.notifier).setProfile(updated);
       await ref.read(achievementsProvider.notifier).refresh();
+      if (city != null) {
+        ref.invalidate(conversationsByTypeProvider(ConversationType.city));
+        unawaited(
+          ref.read(folderUnreadProvider.notifier).refresh(silent: true),
+        );
+      }
     });
   }
 

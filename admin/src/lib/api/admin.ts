@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type {
   ActivityItem,
+  AdminRole,
   AdminUser,
   AdminUserRow,
   AuditLogRow,
@@ -127,6 +128,45 @@ export async function setAppRole(userId: string, role: "user" | "organizer") {
     p_role: role,
   });
   if (error) mapRpcError(error);
+}
+
+export async function fetchPanelRole(
+  userId: string,
+): Promise<AdminRole | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("admin_get_panel_role", {
+    p_user_id: userId,
+  });
+  if (error) mapRpcError(error);
+  return (data as AdminRole | null) ?? null;
+}
+
+export async function setPanelRole(
+  userId: string,
+  role: AdminRole | null,
+): Promise<AdminRole | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("admin_set_panel_role", {
+    p_user_id: userId,
+    p_role: role,
+  });
+  if (error) {
+    const msg = error.message ?? "";
+    if (msg.includes("CANNOT_CHANGE_SELF")) {
+      throw new Error("Нельзя менять свою админ-роль");
+    }
+    if (msg.includes("PHONE_REQUIRED")) {
+      throw new Error("У пользователя не указан телефон");
+    }
+    if (msg.includes("PHONE_TAKEN")) {
+      throw new Error("Этот телефон уже привязан к другому админу");
+    }
+    if (msg.includes("INVALID_ADMIN_ROLE")) {
+      throw new Error("Некорректная роль админки");
+    }
+    mapRpcError(error);
+  }
+  return (data as AdminRole | null) ?? null;
 }
 
 export async function adjustBalance(

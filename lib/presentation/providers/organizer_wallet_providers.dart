@@ -116,3 +116,42 @@ class OrganizerDashboardNotifier
     );
   }
 }
+
+final organizerWithdrawalsProvider = AsyncNotifierProvider<
+    OrganizerWithdrawalsNotifier, List<OrganizerWithdrawalRequest>>(
+  OrganizerWithdrawalsNotifier.new,
+);
+
+class OrganizerWithdrawalsNotifier
+    extends AsyncNotifier<List<OrganizerWithdrawalRequest>> {
+  @override
+  Future<List<OrganizerWithdrawalRequest>> build() {
+    final isOrg =
+        ref.watch(currentProfileProvider).valueOrNull?.isOrganizer ?? false;
+    if (!isOrg) return Future.value(const []);
+    return ref.read(organizerWalletRepositoryProvider).fetchMyWithdrawals();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(organizerWalletRepositoryProvider).fetchMyWithdrawals(),
+    );
+  }
+
+  Future<OrganizerWithdrawalRequest> request({
+    required num amount,
+    required String paymentDetails,
+  }) async {
+    final created =
+        await ref.read(organizerWalletRepositoryProvider).requestWithdrawal(
+              amount: amount,
+              paymentDetails: paymentDetails,
+            );
+    await refresh();
+    await ref.read(organizerWalletProvider.notifier).refresh(silent: true);
+    await ref.read(organizerTransactionsProvider.notifier).refresh();
+    await ref.read(organizerDashboardProvider.notifier).refresh();
+    return created;
+  }
+}

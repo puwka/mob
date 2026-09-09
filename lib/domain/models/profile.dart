@@ -17,6 +17,40 @@ enum AppRole {
   bool get isOrganizer => this == AppRole.organizer;
 }
 
+/// Badge near nickname: admin > moderator > organizer > user.
+enum ProfileBadgeRole {
+  admin,
+  moderator,
+  organizer,
+  user;
+
+  static ProfileBadgeRole fromString(String? value) {
+    switch (value) {
+      case 'admin':
+        return ProfileBadgeRole.admin;
+      case 'moderator':
+        return ProfileBadgeRole.moderator;
+      case 'organizer':
+        return ProfileBadgeRole.organizer;
+      default:
+        return ProfileBadgeRole.user;
+    }
+  }
+
+  static ProfileBadgeRole fromAppRole(AppRole role) {
+    return role.isOrganizer
+        ? ProfileBadgeRole.organizer
+        : ProfileBadgeRole.user;
+  }
+
+  String get labelRu => switch (this) {
+        ProfileBadgeRole.admin => 'Админ',
+        ProfileBadgeRole.moderator => 'Модератор',
+        ProfileBadgeRole.organizer => 'Организатор',
+        ProfileBadgeRole.user => 'Пользователь',
+      };
+}
+
 class Profile {
   const Profile({
     required this.id,
@@ -28,6 +62,7 @@ class Profile {
     this.gameRole,
     this.teamName,
     this.appRole = AppRole.user,
+    this.badgeRole = ProfileBadgeRole.user,
     this.publicQrId,
     this.gamesPlayed = 0,
     this.wins = 0,
@@ -47,6 +82,7 @@ class Profile {
   final String? gameRole;
   final String? teamName;
   final AppRole appRole;
+  final ProfileBadgeRole badgeRole;
   final String? publicQrId;
   final int gamesPlayed;
   final int wins;
@@ -81,6 +117,11 @@ class Profile {
             ? appRoleRaw
             : null);
 
+    final appRole = AppRole.fromString(
+      appRoleRaw == 'user' || appRoleRaw == 'organizer' ? appRoleRaw : 'user',
+    );
+    final badgeRaw = json['badge_role'] as String?;
+
     return Profile(
       id: json['id'] as String,
       phone: json['phone'] as String? ?? '',
@@ -90,9 +131,10 @@ class Profile {
       bio: json['bio'] as String?,
       gameRole: gameRoleRaw,
       teamName: json['team_name'] as String?,
-      appRole: AppRole.fromString(
-        appRoleRaw == 'user' || appRoleRaw == 'organizer' ? appRoleRaw : 'user',
-      ),
+      appRole: appRole,
+      badgeRole: badgeRaw != null
+          ? ProfileBadgeRole.fromString(badgeRaw)
+          : ProfileBadgeRole.fromAppRole(appRole),
       publicQrId: json['public_qr_id'] as String?,
       gamesPlayed: (json['games_played'] as num?)?.toInt() ?? 0,
       wins: (json['wins'] as num?)?.toInt() ?? 0,
@@ -133,6 +175,7 @@ class Profile {
     String? gameRole,
     String? teamName,
     AppRole? appRole,
+    ProfileBadgeRole? badgeRole,
     String? publicQrId,
     int? gamesPlayed,
     int? wins,
@@ -150,6 +193,7 @@ class Profile {
       gameRole: gameRole ?? this.gameRole,
       teamName: teamName ?? this.teamName,
       appRole: appRole ?? this.appRole,
+      badgeRole: badgeRole ?? this.badgeRole,
       publicQrId: publicQrId ?? this.publicQrId,
       gamesPlayed: gamesPlayed ?? this.gamesPlayed,
       wins: wins ?? this.wins,

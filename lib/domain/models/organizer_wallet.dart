@@ -56,7 +56,8 @@ enum OrganizerTxType {
 
   bool get isCredit =>
       this == OrganizerTxType.attendanceReward ||
-      this == OrganizerTxType.bonus;
+      this == OrganizerTxType.bonus ||
+      this == OrganizerTxType.refund;
 }
 
 class OrganizerTransaction {
@@ -140,6 +141,80 @@ class OrganizerDashboardStats {
       participantsCount: (json['participants_count'] as num?)?.toInt() ?? 0,
       confirmedToday: (json['confirmed_today'] as num?)?.toInt() ?? 0,
       balance: (json['balance'] as num?) ?? 0,
+    );
+  }
+}
+
+enum WithdrawalStatus {
+  pending,
+  approved,
+  rejected,
+  cancelled;
+
+  static WithdrawalStatus fromString(String? value) {
+    return WithdrawalStatus.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => WithdrawalStatus.pending,
+    );
+  }
+
+  String get labelRu => switch (this) {
+        WithdrawalStatus.pending => 'На проверке',
+        WithdrawalStatus.approved => 'Выплачено',
+        WithdrawalStatus.rejected => 'Отклонено',
+        WithdrawalStatus.cancelled => 'Отменено',
+      };
+}
+
+class OrganizerWithdrawalRequest {
+  const OrganizerWithdrawalRequest({
+    required this.id,
+    required this.organizerId,
+    required this.amount,
+    required this.fee,
+    required this.netAmount,
+    required this.paymentDetails,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+    this.adminNote,
+    this.reviewedAt,
+  });
+
+  final String id;
+  final String organizerId;
+  final num amount;
+  final num fee;
+  final num netAmount;
+  final String paymentDetails;
+  final WithdrawalStatus status;
+  final String? adminNote;
+  final DateTime? reviewedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  String get amountLabel {
+    final v = amount == amount.roundToDouble()
+        ? '${amount.toInt()}'
+        : amount.toStringAsFixed(2);
+    return '$v CR';
+  }
+
+  factory OrganizerWithdrawalRequest.fromJson(Map<String, dynamic> json) {
+    return OrganizerWithdrawalRequest(
+      id: json['id'] as String,
+      organizerId: json['organizer_id'] as String,
+      amount: (json['amount'] as num?) ?? 0,
+      fee: (json['fee'] as num?) ?? 0,
+      netAmount: (json['net_amount'] as num?) ?? 0,
+      paymentDetails: (json['payment_details'] as String?) ?? '',
+      status: WithdrawalStatus.fromString(json['status'] as String?),
+      adminNote: json['admin_note'] as String?,
+      reviewedAt: json['reviewed_at'] == null
+          ? null
+          : DateTime.parse(json['reviewed_at'] as String),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
 }

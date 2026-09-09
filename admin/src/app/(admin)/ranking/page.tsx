@@ -12,10 +12,9 @@ import {
   fetchCities,
   fetchRankingClans,
   fetchRankingPlayers,
-  setPlayerRating,
 } from "@/lib/api/content";
 import { formatNumber } from "@/lib/utils";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -23,8 +22,6 @@ export default function RankingPage() {
   const [tab, setTab] = useState<"players" | "clans">("players");
   const [scope, setScope] = useState<"global" | "regional">("global");
   const [city, setCity] = useState("Москва");
-  const [msg, setMsg] = useState<string | null>(null);
-  const qc = useQueryClient();
 
   const citiesQ = useQuery({
     queryKey: ["cities"],
@@ -45,18 +42,6 @@ export default function RankingPage() {
     enabled: tab === "clans",
   });
 
-  const ratingMut = useMutation({
-    mutationFn: ({ id, rating }: { id: string; rating: number }) =>
-      setPlayerRating(id, rating),
-    onSuccess: async () => {
-      setMsg("Рейтинг обновлён · клан пересчитается автоматически");
-      await qc.invalidateQueries({ queryKey: ["ranking-players"] });
-      await qc.invalidateQueries({ queryKey: ["ranking-clans"] });
-      await qc.invalidateQueries({ queryKey: ["admin-clans"] });
-    },
-    onError: (e: Error) => setMsg(e.message),
-  });
-
   const topPlayers = (playersQ.data ?? []).slice(0, 3);
   const topClans = (clansQ.data ?? []).slice(0, 3);
 
@@ -64,13 +49,8 @@ export default function RankingPage() {
     <div>
       <PageHeader
         title="Рейтинг"
-        description="Личный рейтинг редактируется; рейтинг клана = сумма участников"
+        description="Рейтинг игрока = XP. Рейтинг клана = сумма XP участников."
       />
-      {msg ? (
-        <div className="mb-3 rounded border border-graphite-700 px-3 py-2 text-sm text-lime">
-          {msg}
-        </div>
-      ) : null}
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Button
@@ -138,8 +118,7 @@ export default function RankingPage() {
                   <th></th>
                   <th>Игрок</th>
                   <th>Город</th>
-                  <th>Рейтинг</th>
-                  <th></th>
+                  <th>XP</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,27 +139,6 @@ export default function RankingPage() {
                     <td>{p.city}</td>
                     <td className="tabular-nums font-medium text-white">
                       {formatNumber(p.rating)}
-                    </td>
-                    <td>
-                      <Button
-                        variant="ghost"
-                        className="h-7 px-2 text-[12px]"
-                        onClick={() => {
-                          const next = prompt(
-                            "Новый рейтинг игрока",
-                            String(p.rating),
-                          );
-                          if (next == null) return;
-                          const n = Number(next);
-                          if (Number.isNaN(n) || n < 0) {
-                            setMsg("Некорректное значение");
-                            return;
-                          }
-                          ratingMut.mutate({ id: p.id, rating: n });
-                        }}
-                      >
-                        Изменить
-                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -214,7 +172,7 @@ export default function RankingPage() {
                   <th>Клан</th>
                   <th>TAG</th>
                   <th>Участники</th>
-                  <th>Рейтинг</th>
+                  <th>XP</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,8 +198,8 @@ export default function RankingPage() {
             </table>
           </div>
           <p className="mt-2 text-[12px] text-graphite-600">
-            Рейтинг клана нельзя менять вручную — он пересчитывается при изменении
-            личного рейтинга или состава.
+            Рейтинг клана нельзя менять вручную — сумма XP участников
+            пересчитывается автоматически.
           </p>
         </>
       )}

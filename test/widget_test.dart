@@ -8,6 +8,7 @@ import 'package:proj/core/utils/validators.dart';
 import 'package:proj/data/repositories/event_repository.dart';
 import 'package:proj/domain/models/achievement.dart';
 import 'package:proj/domain/models/conversation.dart';
+import 'package:proj/domain/models/dating.dart';
 import 'package:proj/domain/models/event.dart';
 import 'package:proj/domain/models/profile.dart';
 import 'package:proj/domain/models/ranking.dart';
@@ -181,8 +182,10 @@ void main() {
   group('Integration models', () {
     test('conversation folder labels match dialogs UI', () {
       expect(ConversationType.market.folderLabel, 'Барахолка');
+      expect(ConversationType.dating.folderLabel, 'Знакомства');
       expect(ConversationType.clan.folderLabel, 'Клан');
       expect(ConversationType.user.folderLabel, 'Личные');
+      expect(ConversationType.city.folderLabel, 'Город');
     });
 
     test('clan rating is sum of member ratings (client-side formula check)', () {
@@ -263,5 +266,101 @@ void main() {
       expect(r.rewardLabel, '+100 CR');
       expect(r.balanceLabel, '1350 CR');
     });
+  });
+
+  group('DatingCandidate', () {
+    test('parses feed payload and caps photos at 5', () {
+      final c = DatingCandidate.fromJson({
+        'id': 'u1',
+        'nickname': 'Ворон',
+        'city': 'Москва',
+        'avatar_url': 'https://example.com/a.jpg',
+        'photo_urls': [
+          'https://example.com/a.jpg',
+          'https://example.com/1.jpg',
+          'https://example.com/2.jpg',
+          'https://example.com/3.jpg',
+          'https://example.com/4.jpg',
+          'https://example.com/5.jpg',
+        ],
+      });
+      expect(c.nickname, 'Ворон');
+      expect(c.city, 'Москва');
+      expect(c.photoUrls.length, 5);
+      expect(c.displayPhotos.first, 'https://example.com/a.jpg');
+    });
+
+    test('falls back to avatar when photo_urls empty', () {
+      final c = DatingCandidate.fromJson({
+        'id': 'u2',
+        'nickname': 'Fox',
+        'city': 'Казань',
+        'avatar_url': 'https://example.com/av.jpg',
+        'photo_urls': [],
+      });
+      expect(c.displayPhotos, ['https://example.com/av.jpg']);
+    });
+
+    test('DatingActionResult parses match payload', () {
+      final r = DatingActionResult.fromJson({
+        'action_id': 'a1',
+        'to_user_id': 'u2',
+        'action': 'like',
+        'matched': true,
+        'inserted': true,
+        'match_id': 'm1',
+        'conversation_id': 'c1',
+        'created_at': '2026-09-08T12:00:00Z',
+        'me': {
+          'id': 'u1',
+          'nickname': 'Ястреб',
+          'city': 'Казань',
+          'avatar_url': null,
+        },
+        'target': {
+          'id': 'u2',
+          'nickname': 'Ворон',
+          'city': 'Москва',
+          'avatar_url': 'https://example.com/a.jpg',
+        },
+      });
+      expect(r.action, DatingActionType.like);
+      expect(r.matched, isTrue);
+      expect(r.shouldShowMatchUi, isTrue);
+      expect(r.matchId, 'm1');
+      expect(r.conversationId, 'c1');
+      expect(r.me.nickname, 'Ястреб');
+      expect(r.target.nickname, 'Ворон');
+    });
+
+    test('DatingActionResult hides match UI when not inserted', () {
+      final r = DatingActionResult.fromJson({
+        'action_id': 'a1',
+        'to_user_id': 'u2',
+        'action': 'like',
+        'matched': true,
+        'inserted': false,
+        'match_id': 'm1',
+        'created_at': '2026-09-08T12:00:00Z',
+        'me': {'id': 'u1', 'nickname': 'A', 'city': 'X'},
+        'target': {'id': 'u2', 'nickname': 'B', 'city': 'Y'},
+      });
+      expect(r.shouldShowMatchUi, isFalse);
+    });
+
+    test('DatingMatch parses get_my_matches row', () {
+      final m = DatingMatch.fromJson({
+        'match_id': 'm1',
+        'user_id': 'u2',
+        'nickname': 'Ворон',
+        'city': 'Москва',
+        'avatar_url': null,
+        'created_at': '2026-09-08T12:00:00Z',
+        'conversation_id': 'c1',
+      });
+      expect(m.nickname, 'Ворон');
+      expect(m.conversationId, 'c1');
+    });
+
   });
 }

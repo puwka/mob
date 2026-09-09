@@ -77,6 +77,24 @@ abstract final class ErrorMapper {
     if (blob.contains('NO_SLOTS')) {
       return 'Мест нет';
     }
+    if (blob.contains('USER_BLOCKED')) {
+      return 'Пользователь недоступен';
+    }
+    if (blob.contains('CHAT_MUTED')) {
+      return 'Вам запрещено писать в этот чат (мут)';
+    }
+    if (blob.contains('MAP_LOCATION_REQUIRED')) {
+      return 'Укажите точку на карте или выберите полигон';
+    }
+    if (blob.contains('INVALID_COORDINATES')) {
+      return 'Некорректные координаты';
+    }
+    if (blob.contains('INVALID_ADDRESS') || blob.contains('INVALID_POLYGON_NAME')) {
+      return 'Проверьте название и адрес полигона';
+    }
+    if (blob.contains('CANNOT_ACTION_SELF')) {
+      return 'Нельзя выполнить действие на себя';
+    }
     if (e.code == '23505') {
       if (e.message.contains('nickname') ||
           (e.details?.toString().contains('nickname') ?? false)) {
@@ -93,6 +111,14 @@ abstract final class ErrorMapper {
     }
     if (e.code == '42P17' || blob.contains('INFINITE RECURSION')) {
       return 'Ошибка доступа к диалогам. Обновите SQL-миграции.';
+    }
+    if (blob.contains('NOT ASSIGNED') || blob.contains('V_MATCH')) {
+      return 'Ошибка знакомств на сервере. Примените миграцию 000043.';
+    }
+    // Surface actionable server messages (P0001 custom exceptions).
+    final msg = e.message.trim();
+    if (msg.isNotEmpty && msg.length < 180 && !msg.toLowerCase().contains('json')) {
+      return msg;
     }
     return 'Ошибка сервера. Попробуйте позже.';
   }

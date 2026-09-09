@@ -17,7 +17,7 @@ class AppSettingsRepository {
   }
 
   Future<int> profilePhotosLimit() =>
-      getInt('profile_photos_limit', fallback: 4);
+      getInt('profile_photos_limit', fallback: 6);
 
   Future<int> listingImagesLimit() =>
       getInt('listing_images_limit', fallback: 8);

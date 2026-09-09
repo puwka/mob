@@ -1,7 +1,9 @@
 enum ConversationType {
   market,
+  dating,
   clan,
-  user;
+  user,
+  city;
 
   static ConversationType fromString(String value) {
     return ConversationType.values.firstWhere(
@@ -12,8 +14,10 @@ enum ConversationType {
 
   String get folderLabel => switch (this) {
         ConversationType.market => 'Барахолка',
+        ConversationType.dating => 'Знакомства',
         ConversationType.clan => 'Клан',
         ConversationType.user => 'Личные',
+        ConversationType.city => 'Город',
       };
 }
 
@@ -30,6 +34,34 @@ enum ClanChatChannel {
   }
 }
 
+class ChatMuteInfo {
+  const ChatMuteInfo({
+    required this.conversationId,
+    this.mutedUntil,
+    this.reason,
+    required this.createdAt,
+  });
+
+  final String conversationId;
+  final DateTime? mutedUntil;
+  final String? reason;
+  final DateTime createdAt;
+
+  bool get isActive =>
+      mutedUntil == null || mutedUntil!.isAfter(DateTime.now());
+
+  factory ChatMuteInfo.fromJson(Map<String, dynamic> json) {
+    return ChatMuteInfo(
+      conversationId: '${json['conversation_id']}',
+      mutedUntil: json['muted_until'] == null
+          ? null
+          : DateTime.tryParse('${json['muted_until']}'),
+      reason: json['reason'] as String?,
+      createdAt: DateTime.tryParse('${json['created_at']}') ?? DateTime.now(),
+    );
+  }
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -39,7 +71,12 @@ class ChatMessage {
     required this.createdAt,
     this.editedAt,
     this.deletedAt,
+    this.messageType = ChatMessageType.text,
+    this.audioUrl,
+    this.audioDurationMs,
+    this.imageUrl,
     this.senderNickname,
+    this.senderAvatarUrl,
     this.pending = false,
     this.failed = false,
   });
@@ -51,27 +88,58 @@ class ChatMessage {
   final DateTime createdAt;
   final DateTime? editedAt;
   final DateTime? deletedAt;
+  final ChatMessageType messageType;
+  final String? audioUrl;
+  final int? audioDurationMs;
+  final String? imageUrl;
   final String? senderNickname;
+  final String? senderAvatarUrl;
   final bool pending;
   final bool failed;
 
   bool get isDeleted => deletedAt != null;
+  bool get isVoice => messageType == ChatMessageType.voice;
+  bool get isImage => messageType == ChatMessageType.image;
+
+  String get displaySenderName {
+    final n = senderNickname?.trim();
+    if (n != null && n.isNotEmpty) return n;
+    return 'Игрок';
+  }
+
+  String get previewText {
+    if (isDeleted) return 'Сообщение удалено';
+    if (isVoice) return 'Голосовое сообщение';
+    if (isImage) return 'Фото';
+    return text;
+  }
 
   ChatMessage copyWith({
     bool? pending,
     bool? failed,
     String? id,
     String? senderNickname,
+    String? senderAvatarUrl,
+    String? audioUrl,
+    int? audioDurationMs,
+    String? imageUrl,
+    ChatMessageType? messageType,
+    String? text,
   }) {
     return ChatMessage(
       id: id ?? this.id,
       conversationId: conversationId,
       senderId: senderId,
-      text: text,
+      text: text ?? this.text,
       createdAt: createdAt,
       editedAt: editedAt,
       deletedAt: deletedAt,
+      messageType: messageType ?? this.messageType,
+      audioUrl: audioUrl ?? this.audioUrl,
+      audioDurationMs: audioDurationMs ?? this.audioDurationMs,
+      imageUrl: imageUrl ?? this.imageUrl,
       senderNickname: senderNickname ?? this.senderNickname,
+      senderAvatarUrl: senderAvatarUrl ?? this.senderAvatarUrl,
       pending: pending ?? this.pending,
       failed: failed ?? this.failed,
     );
@@ -79,10 +147,14 @@ class ChatMessage {
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     String? nick;
+    String? avatar;
     final sender = json['sender'];
     if (sender is Map) {
       nick = sender['nickname'] as String?;
+      avatar = sender['avatar_url'] as String?;
     }
+    nick ??= json['sender_nickname'] as String?;
+    avatar ??= json['sender_avatar_url'] as String?;
 
     return ChatMessage(
       id: json['id'] as String,
@@ -96,7 +168,27 @@ class ChatMessage {
       deletedAt: json['deleted_at'] == null
           ? null
           : DateTime.parse(json['deleted_at'] as String),
+      messageType: ChatMessageType.fromString(
+        json['message_type'] as String? ?? 'text',
+      ),
+      audioUrl: json['audio_url'] as String?,
+      audioDurationMs: (json['audio_duration_ms'] as num?)?.toInt(),
+      imageUrl: json['image_url'] as String?,
       senderNickname: nick,
+      senderAvatarUrl: avatar,
+    );
+  }
+}
+
+enum ChatMessageType {
+  text,
+  voice,
+  image;
+
+  static ChatMessageType fromString(String value) {
+    return ChatMessageType.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => ChatMessageType.text,
     );
   }
 }
@@ -144,13 +236,16 @@ class ConversationPreview {
 
   String get displayTitle {
     if (type == ConversationType.market) {
-      return listingTitle ?? title ?? 'Объявление';
+      return peerNickname ?? listingTitle ?? title ?? 'Объявление';
     }
     if (type == ConversationType.clan) {
       if (clanChannel == ClanChatChannel.officers) {
         return 'Руководство';
       }
       return 'Общий чат';
+    }
+    if (type == ConversationType.city) {
+      return title ?? 'Чат города';
     }
     return peerNickname ?? title ?? 'Диалог';
   }
@@ -223,13 +318,16 @@ class ConversationDetail {
 
   String get displayTitle {
     if (type == ConversationType.market) {
-      return listingTitle ?? title ?? 'Объявление';
+      return peerNickname ?? listingTitle ?? title ?? 'Объявление';
     }
     if (type == ConversationType.clan) {
       if (clanChannel == ClanChatChannel.officers) {
         return 'Руководство';
       }
       return 'Общий чат';
+    }
+    if (type == ConversationType.city) {
+      return title ?? 'Чат города';
     }
     return peerNickname ?? title ?? 'Диалог';
   }

@@ -1,12 +1,14 @@
 enum ClanRole {
   leader,
   officer,
+  trainer,
   member;
 
   static ClanRole fromString(String value) {
     return switch (value) {
       'leader' || 'owner' => ClanRole.leader,
-      'officer' => ClanRole.officer,
+      'officer' || 'deputy' => ClanRole.officer,
+      'trainer' => ClanRole.trainer,
       _ => ClanRole.member,
     };
   }
@@ -14,10 +16,21 @@ enum ClanRole {
   String get dbValue => name;
 
   String get labelRu => switch (this) {
-        ClanRole.leader => 'Лидер',
-        ClanRole.officer => 'Офицер',
+        ClanRole.leader => 'Командир',
+        ClanRole.officer => 'Заместитель командира',
+        ClanRole.trainer => 'Тренер',
         ClanRole.member => 'Боец',
       };
+
+  bool get isLeadership =>
+      this == ClanRole.leader ||
+      this == ClanRole.officer ||
+      this == ClanRole.trainer;
+
+  bool get canKickMembers =>
+      this == ClanRole.leader || this == ClanRole.officer;
+
+  bool get canAssignRoles => this == ClanRole.leader;
 }
 
 enum ClanJoinStatus {
@@ -39,6 +52,7 @@ class Clan {
     required this.name,
     required this.tag,
     required this.description,
+    this.city,
     this.avatarUrl,
     this.leaderId,
     this.leaderNickname,
@@ -51,6 +65,7 @@ class Clan {
   final String name;
   final String tag;
   final String description;
+  final String? city;
   final String? avatarUrl;
   final String? leaderId;
   final String? leaderNickname;
@@ -68,6 +83,7 @@ class Clan {
       name: json['name'] as String,
       tag: (json['tag'] as String? ?? '').toUpperCase(),
       description: json['description'] as String? ?? '',
+      city: (json['city'] as String?)?.trim(),
       avatarUrl: json['avatar_url'] as String?,
       leaderId: json['leader_id'] as String?,
       leaderNickname: json['leader_nickname'] as String?,

@@ -49,5 +49,7 @@
 	<string>Нужен доступ к фото для загрузки аватара и обложек мероприятий.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Камера нужна организатору для сканирования QR участников на мероприятии.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Микрофон нужен для записи голосовых сообщений в чатах.</string>
 </dict>
 </plist>

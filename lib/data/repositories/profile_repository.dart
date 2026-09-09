@@ -41,19 +41,19 @@ class ProfileRepository {
         .select()
         .single();
 
-    return Profile.fromJson(row);
+    return _withBadge(Profile.fromJson(row));
   }
 
   Future<Profile> getById(String id) async {
     final row = await _client.from(_table).select().eq('id', id).single();
-    return Profile.fromJson(row);
+    return _withBadge(Profile.fromJson(row));
   }
 
   Future<Profile?> getByIdOrNull(String id) async {
     final rows =
         await _client.from(_table).select().eq('id', id).maybeSingle();
     if (rows == null) return null;
-    return Profile.fromJson(rows);
+    return _withBadge(Profile.fromJson(rows));
   }
 
   Future<Profile> updateFields({
@@ -90,7 +90,7 @@ class ProfileRepository {
         .select()
         .single();
 
-    return Profile.fromJson(row);
+    return _withBadge(Profile.fromJson(row));
   }
 
   Future<Profile> update(Profile profile) async {
@@ -105,6 +105,22 @@ class ProfileRepository {
       gameRole: profile.gameRole,
       teamName: profile.teamName,
     );
+  }
+
+  Future<Profile> _withBadge(Profile profile) async {
+    try {
+      final raw = await _client.rpc(
+        'profile_badge_role',
+        params: {'p_user_id': profile.id},
+      );
+      return profile.copyWith(
+        badgeRole: ProfileBadgeRole.fromString(raw as String?),
+      );
+    } catch (_) {
+      return profile.copyWith(
+        badgeRole: ProfileBadgeRole.fromAppRole(profile.appRole),
+      );
+    }
   }
 
   Future<DateTime?> touchPresence() async {

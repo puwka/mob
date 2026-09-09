@@ -8,34 +8,104 @@ import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/event.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
+import '../../../presentation/providers/repository_providers.dart';
+import '../../../services/map_launcher.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/feedback.dart';
 
-class OrganizerEventDetailsScreen extends ConsumerWidget {
+class OrganizerEventDetailsScreen extends ConsumerStatefulWidget {
   const OrganizerEventDetailsScreen({super.key, required this.eventId});
 
   final String eventId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(eventDetailsProvider(eventId));
+  ConsumerState<OrganizerEventDetailsScreen> createState() =>
+      _OrganizerEventDetailsScreenState();
+}
+
+class _OrganizerEventDetailsScreenState
+    extends ConsumerState<OrganizerEventDetailsScreen> {
+  var _deleting = false;
+
+  Future<void> _deleteEvent(Event event) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Удалить мероприятие?'),
+        content: Text(
+          '«${event.title}» будет удалено вместе с записями участников. '
+          'Это действие нельзя отменить.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Удалить',
+              style: TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await ref.read(eventRepositoryProvider).deleteEvent(widget.eventId);
+      ref.invalidate(myOrganizerEventsProvider);
+      ref.invalidate(eventDetailsProvider(widget.eventId));
+      ref.invalidate(eventsListProvider);
+      if (!mounted) return;
+      context.go('/main/profile/organizer/events');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Мероприятие удалено')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ErrorMapper.map(e))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(eventDetailsProvider(widget.eventId));
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Мероприятие')),
+      appBar: AppBar(
+        title: const Text('Мероприятие'),
+        actions: [
+          if (async.hasValue)
+            IconButton(
+              tooltip: 'Удалить',
+              onPressed: _deleting ? null : () => _deleteEvent(async.requireValue),
+              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+            ),
+        ],
+      ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
           child: AsyncErrorRetry(
             message: ErrorMapper.map(e),
-            onRetry: () =>
-                ref.read(eventDetailsProvider(eventId).notifier).refresh(),
+            onRetry: () => ref
+                .read(eventDetailsProvider(widget.eventId).notifier)
+                .refresh(),
           ),
         ),
         data: (event) {
           final date = DateFormat('d MMMM yyyy, HH:mm', 'ru')
               .format(event.eventDate.toLocal());
+          final eventId = widget.eventId;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -83,11 +153,41 @@ class OrganizerEventDetailsScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      event.location,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
+                    InkWell(
+                      onTap: () async {
+                        try {
+                          await MapLauncher.open(
+                            latitude: event.latitude,
+                            longitude: event.longitude,
+                            query: '${event.city}, ${event.location}',
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(ErrorMapper.map(e))),
+                          );
+                        }
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.place_outlined,
+                            size: 16,
+                            color: AppColors.accent,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              event.location,
+                              style: const TextStyle(
+                                color: AppColors.accent,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                                decorationColor: AppColors.accent,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -117,19 +217,29 @@ class OrganizerEventDetailsScreen extends ConsumerWidget {
               AppButton(
                 label: 'Участники',
                 variant: AppButtonVariant.secondary,
-                onPressed: () => context.push(
-                  '/main/profile/organizer/events/$eventId/participants',
-                ),
+                onPressed: _deleting
+                    ? null
+                    : () => context.push(
+                          '/main/profile/organizer/events/$eventId/participants',
+                        ),
               ),
               const SizedBox(height: 8),
               AppButton(
                 label: 'Сканировать QR',
                 icon: Icons.qr_code_scanner,
-                onPressed: event.status == EventStatus.active
+                onPressed: !_deleting && event.status == EventStatus.active
                     ? () => context.push(
                           '/main/profile/organizer/events/$eventId/scanner',
                         )
                     : null,
+              ),
+              const SizedBox(height: 8),
+              AppButton(
+                label: 'Удалить мероприятие',
+                variant: AppButtonVariant.danger,
+                loading: _deleting,
+                icon: Icons.delete_outline,
+                onPressed: _deleting ? null : () => _deleteEvent(event),
               ),
             ],
           );

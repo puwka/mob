@@ -89,6 +89,42 @@ export const fetchMessages = (conversationId: string) =>
 export const softDeleteMessage = (id: string) =>
   rpc<void>("admin_soft_delete_message", { p_message_id: id });
 
+export type ChatMuteRow = {
+  id: string;
+  user_id: string;
+  nickname: string | null;
+  muted_until: string | null;
+  reason: string | null;
+  created_at: string;
+};
+
+export const fetchConversationMutes = (conversationId: string) =>
+  rpc<ChatMuteRow[]>("admin_list_conversation_mutes", {
+    p_conversation_id: conversationId,
+  });
+
+export const muteCityUser = (params: {
+  conversationId: string;
+  userId: string;
+  minutes?: number | null;
+  reason?: string;
+}) =>
+  rpc<string>("admin_mute_city_user", {
+    p_conversation_id: params.conversationId,
+    p_user_id: params.userId,
+    p_minutes: params.minutes ?? null,
+    p_reason: params.reason ?? null,
+  });
+
+export const unmuteCityUser = (params: {
+  conversationId: string;
+  userId: string;
+}) =>
+  rpc<void>("admin_unmute_city_user", {
+    p_conversation_id: params.conversationId,
+    p_user_id: params.userId,
+  });
+
 export const setConversationStatus = (
   id: string,
   status: "active" | "blocked" | "archived",
@@ -164,6 +200,44 @@ export const adjustBalance = (
     p_organizer_id: organizerId,
     p_amount: amount,
     p_reason: reason,
+  });
+
+export type WithdrawalRequestRow = {
+  id: string;
+  organizer_id: string;
+  organizer_nickname: string;
+  organizer_phone: string;
+  amount: number;
+  fee: number;
+  net_amount: number;
+  payment_details: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  admin_note: string | null;
+  reviewed_by: string | null;
+  reviewer_phone: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  balance: number;
+};
+
+export const fetchWithdrawalRequests = (status?: string) =>
+  rpc<WithdrawalRequestRow[]>("admin_list_withdrawal_requests", {
+    p_status: status || null,
+    p_limit: 100,
+    p_offset: 0,
+  });
+
+export const approveWithdrawal = (id: string, note?: string) =>
+  rpc<WithdrawalRequestRow>("admin_approve_withdrawal", {
+    p_id: id,
+    p_note: note || null,
+  });
+
+export const rejectWithdrawal = (id: string, note?: string) =>
+  rpc<WithdrawalRequestRow>("admin_reject_withdrawal", {
+    p_id: id,
+    p_note: note || null,
   });
 
 // ——— Attendance ———

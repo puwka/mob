@@ -7,6 +7,7 @@ import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/event.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/progression_providers.dart';
+import '../../../services/map_launcher.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/feedback.dart';
@@ -186,7 +187,13 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
                     const Divider(height: 18),
                     _Meta(Icons.location_city_outlined, 'Город', e.city),
                     const Divider(height: 18),
-                    _Meta(Icons.place_outlined, 'Место', e.location),
+                    _Meta(
+                      Icons.place_outlined,
+                      'Адрес',
+                      e.location,
+                      onTap: () => _openEventMap(context, e),
+                      trailing: Icons.map_outlined,
+                    ),
                     const Divider(height: 18),
                     _Meta(
                       Icons.person_outline,
@@ -292,15 +299,23 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
 }
 
 class _Meta extends StatelessWidget {
-  const _Meta(this.icon, this.label, this.value);
+  const _Meta(
+    this.icon,
+    this.label,
+    this.value, {
+    this.onTap,
+    this.trailing,
+  });
 
   final IconData icon;
   final String label;
   final String value;
+  final VoidCallback? onTap;
+  final IconData? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final row = Row(
       children: [
         Icon(icon, size: 16, color: AppColors.textTertiary),
         const SizedBox(width: 10),
@@ -318,12 +333,40 @@ class _Meta extends StatelessWidget {
                 value,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       fontSize: 14,
+                      color: onTap == null ? null : AppColors.accent,
+                      decoration:
+                          onTap == null ? null : TextDecoration.underline,
+                      decorationColor: AppColors.accent,
                     ),
               ),
             ],
           ),
         ),
+        if (trailing != null)
+          Icon(trailing, size: 18, color: AppColors.accent),
       ],
+    );
+
+    if (onTap == null) return row;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: row,
+    );
+  }
+}
+
+Future<void> _openEventMap(BuildContext context, Event event) async {
+  try {
+    await MapLauncher.open(
+      latitude: event.latitude,
+      longitude: event.longitude,
+      query: '${event.city}, ${event.location}',
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ErrorMapper.map(e))),
     );
   }
 }

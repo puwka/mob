@@ -129,15 +129,19 @@ class ListingRepository {
     return switch (filters.sort) {
       ListingSort.newest => query
           .order('is_promoted', ascending: false)
+          .order('boosted_at', ascending: false, nullsFirst: false)
           .order('created_at', ascending: false),
       ListingSort.cheapest => query
           .order('is_promoted', ascending: false)
+          .order('boosted_at', ascending: false, nullsFirst: false)
           .order('price', ascending: true),
       ListingSort.expensive => query
           .order('is_promoted', ascending: false)
+          .order('boosted_at', ascending: false, nullsFirst: false)
           .order('price', ascending: false),
       ListingSort.popular => query
           .order('is_promoted', ascending: false)
+          .order('boosted_at', ascending: false, nullsFirst: false)
           .order('views_count', ascending: false),
     };
   }

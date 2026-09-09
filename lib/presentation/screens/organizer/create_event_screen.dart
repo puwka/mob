@@ -8,14 +8,17 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../domain/models/polygon.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
+import '../../../presentation/providers/polygon_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/app_text_field.dart';
 import '../../../widgets/city_picker.dart';
 import '../../../widgets/feedback.dart';
+import 'map_location_picker_screen.dart';
 
 class CreateEventScreen extends ConsumerStatefulWidget {
   const CreateEventScreen({super.key});
@@ -35,6 +38,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   DateTime _date = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _time = const TimeOfDay(hour: 18, minute: 0);
   Uint8List? _photoBytes;
+  PolygonVenue? _polygon;
+  double? _lat;
+  double? _lng;
   var _saving = false;
   String? _error;
 
@@ -60,6 +66,92 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   Future<void> _pickCity() async {
     final city = await showCityPicker(context, selected: _city.text);
     if (city != null) setState(() => _city.text = city);
+  }
+
+  Future<void> _pickPolygon() async {
+    final polygons = ref.read(myPolygonsProvider).valueOrNull ?? const [];
+    if (polygons.isEmpty) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('Нет полигонов'),
+          content: const Text(
+            'Сначала создайте полигон с адресом на карте.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Создать'),
+            ),
+          ],
+        ),
+      );
+      if (go == true && mounted) {
+        await context.push('/main/profile/organizer/polygons/create');
+        await ref.read(myPolygonsProvider.notifier).refresh();
+      }
+      return;
+    }
+
+    final selected = await showModalBottomSheet<PolygonVenue>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+      ),
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text(
+                'Выберите полигон',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            for (final p in polygons)
+              ListTile(
+                leading: const Icon(Icons.map_outlined, color: AppColors.accent),
+                title: Text(p.name),
+                subtitle: Text('${p.city} · ${p.address}'),
+                onTap: () => Navigator.pop(context, p),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _polygon = selected;
+      _city.text = selected.city;
+      _location.text = selected.mapLabel;
+      _lat = selected.latitude;
+      _lng = selected.longitude;
+    });
+  }
+
+  Future<void> _pickMap() async {
+    final result = await openMapLocationPicker(
+      context,
+      latitude: _lat,
+      longitude: _lng,
+      address: _location.text,
+      title: 'Место мероприятия',
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _polygon = null;
+      _lat = result.latitude;
+      _lng = result.longitude;
+      if (result.address != null && result.address!.isNotEmpty) {
+        _location.text = result.address!;
+      }
+    });
   }
 
   Future<void> _pickDate() async {
@@ -126,6 +218,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
+    if (_lat == null || _lng == null) {
+      setState(() => _error = 'Укажите полигон или точку на карте');
+      return;
+    }
+
     final limit = int.tryParse(_limit.text.trim());
     if (limit == null || limit < 1) {
       setState(() => _error = 'Укажите корректный лимит участников');
@@ -151,6 +248,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         location: _location.text.trim(),
         eventDate: eventDate,
         maxParticipants: limit,
+        polygonId: _polygon?.id,
+        latitude: _lat,
+        longitude: _lng,
       );
 
       if (_photoBytes != null && uid != null) {
@@ -178,6 +278,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final dateLabel = DateFormat('d MMMM yyyy', 'ru').format(_date);
     final timeLabel =
         '${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}';
+    final hasPin = _lat != null && _lng != null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -213,12 +314,57 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Выберите город' : null,
             ),
+            const SizedBox(height: 12),
+            const SectionTitle(title: 'Место на карте'),
+            AppCard(
+              onTap: _pickPolygon,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.map_outlined, color: AppColors.accent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _polygon == null
+                          ? 'Выбрать полигон'
+                          : 'Полигон: ${_polygon!.name}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: AppColors.textTertiary),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            AppCard(
+              onTap: _pickMap,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Row(
+                children: [
+                  Icon(
+                    hasPin ? Icons.place : Icons.add_location_alt_outlined,
+                    color: AppColors.accent,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      hasPin
+                          ? 'Точка: ${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}'
+                          : 'Или указать точку на карте',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: AppColors.textTertiary),
+                ],
+              ),
+            ),
             const SizedBox(height: 10),
             AppTextField(
               controller: _location,
-              label: 'Место',
+              label: 'Адрес / место',
+              maxLines: 2,
               validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Укажите место' : null,
+                  (v == null || v.trim().isEmpty) ? 'Укажите адрес' : null,
             ),
             const SizedBox(height: 10),
             Row(

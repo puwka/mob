@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/conversation.dart';
+import '../../domain/models/polygon.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../../presentation/providers/polygon_providers.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
 import '../../presentation/screens/chats/chat_screen.dart';
@@ -11,6 +13,8 @@ import '../../presentation/screens/chats/dialogs_screen.dart';
 import '../../presentation/screens/clans/clan_profile_screen.dart';
 import '../../presentation/screens/clans/clan_search_screen.dart';
 import '../../presentation/screens/clans/create_clan_screen.dart';
+import '../../presentation/screens/dating/dating_matches_screen.dart';
+import '../../presentation/screens/dating/dating_screen.dart';
 import '../../presentation/screens/events/event_details_screen.dart';
 import '../../presentation/screens/events/events_screen.dart';
 import '../../presentation/screens/main/main_screen.dart';
@@ -19,8 +23,10 @@ import '../../presentation/screens/market/listing_details_screen.dart';
 import '../../presentation/screens/market/market_screen.dart';
 import '../../presentation/screens/market/my_listings_screen.dart';
 import '../../presentation/screens/organizer/create_event_screen.dart';
+import '../../presentation/screens/organizer/edit_polygon_screen.dart';
 import '../../presentation/screens/organizer/event_qr_scanner_screen.dart';
 import '../../presentation/screens/organizer/my_organizer_events_screen.dart';
+import '../../presentation/screens/organizer/my_polygons_screen.dart';
 import '../../presentation/screens/organizer/organizer_balance_screen.dart';
 import '../../presentation/screens/organizer/organizer_event_details_screen.dart';
 import '../../presentation/screens/organizer/organizer_hub_screen.dart';
@@ -128,6 +134,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                       final folder = state.pathParameters['folder'];
                       final type = switch (folder) {
                         'clan' => ConversationType.clan,
+                        'city' => ConversationType.city,
+                        'market' => ConversationType.market,
+                        'dating' => ConversationType.dating,
                         _ => ConversationType.market,
                       };
                       return ChatFolderScreen(type: type);
@@ -177,6 +186,17 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                     ],
                   ),
                   GoRoute(
+                    path: 'dating',
+                    builder: (context, state) => const DatingScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'matches',
+                        builder: (context, state) =>
+                            const DatingMatchesScreen(),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
                     path: 'user/:userId',
                     builder: (context, state) => UserProfileScreen(
                       userId: state.pathParameters['userId']!,
@@ -203,6 +223,39 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                     },
                     builder: (context, state) => const OrganizerHubScreen(),
                     routes: [
+                      GoRoute(
+                        path: 'polygons',
+                        builder: (context, state) => const MyPolygonsScreen(),
+                        routes: [
+                          GoRoute(
+                            path: 'create',
+                            builder: (context, state) =>
+                                const EditPolygonScreen(),
+                          ),
+                          GoRoute(
+                            path: ':polygonId/edit',
+                            builder: (context, state) {
+                              final extra = state.extra;
+                              if (extra is PolygonVenue) {
+                                return EditPolygonScreen(initial: extra);
+                              }
+                              final id = state.pathParameters['polygonId'];
+                              final list =
+                                  ref.read(myPolygonsProvider).valueOrNull;
+                              PolygonVenue? found;
+                              if (id != null && list != null) {
+                                for (final p in list) {
+                                  if (p.id == id) {
+                                    found = p;
+                                    break;
+                                  }
+                                }
+                              }
+                              return EditPolygonScreen(initial: found);
+                            },
+                          ),
+                        ],
+                      ),
                       GoRoute(
                         path: 'events',
                         builder: (context, state) =>

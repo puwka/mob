@@ -17,6 +17,7 @@ const LABELS: Record<string, string> = {
   organizer_attendance_reward: "Награда за QR (CR)",
   event_creation_fee: "Комиссия создания события",
   withdrawal_fee: "Комиссия вывода",
+  min_withdrawal_amount: "Минимальная сумма вывода",
   profile_photos_limit: "Лимит фото профиля",
   listing_images_limit: "Лимит фото объявления",
   message_max_length: "Макс. длина сообщения",

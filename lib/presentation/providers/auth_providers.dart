@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/profile_repository.dart';
 import '../../domain/models/profile.dart';
+import 'session_reset.dart';
 
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
   return Supabase.instance.client;
@@ -26,8 +27,10 @@ final authStateProvider = StreamProvider<AuthState>((ref) {
 });
 
 final currentUserProvider = Provider<User?>((ref) {
+  // Rebuild when auth stream emits, but always read the live client user
+  // so login/register never keep a stale cached User.
   ref.watch(authStateProvider);
-  return ref.watch(authRepositoryProvider).currentUser;
+  return ref.watch(supabaseClientProvider).auth.currentUser;
 });
 
 final isOrganizerProvider = Provider<bool>((ref) {
@@ -42,8 +45,7 @@ final currentProfileProvider =
 class CurrentProfileNotifier extends AsyncNotifier<Profile?> {
   @override
   Future<Profile?> build() async {
-    final auth = ref.watch(authRepositoryProvider);
-    final user = auth.currentUser;
+    final user = ref.watch(currentUserProvider);
     if (user == null) return null;
 
     final repo = ref.watch(profileRepositoryProvider);
@@ -59,7 +61,7 @@ class CurrentProfileNotifier extends AsyncNotifier<Profile?> {
       state = const AsyncLoading();
     }
     state = await AsyncValue.guard(() async {
-      final user = ref.read(authRepositoryProvider).currentUser;
+      final user = ref.read(currentUserProvider);
       if (user == null) return null;
       return ref.read(profileRepositoryProvider).getByIdOrNull(user.id);
     });
@@ -84,6 +86,7 @@ class AuthController extends AsyncNotifier<void> {
             city: city,
             password: password,
           );
+      _resetUserScopedProviders();
       await ref.read(currentProfileProvider.notifier).refresh();
     });
   }
@@ -98,6 +101,7 @@ class AuthController extends AsyncNotifier<void> {
             phone: phone,
             password: password,
           );
+      _resetUserScopedProviders();
       await ref.read(currentProfileProvider.notifier).refresh();
     });
   }
@@ -106,8 +110,12 @@ class AuthController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await ref.read(authRepositoryProvider).logout();
-      ref.invalidate(currentProfileProvider);
+      _resetUserScopedProviders();
     });
+  }
+
+  void _resetUserScopedProviders() {
+    resetUserScopedProviders(ref);
   }
 }
 

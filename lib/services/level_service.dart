@@ -20,6 +20,7 @@ class LevelProgress {
 }
 
 /// Central XP formula — keep out of widgets.
+/// Must stay in sync with SQL `public.compute_player_xp`.
 class XpService {
   const XpService();
 
@@ -28,6 +29,9 @@ class XpService {
   /// + wins * 250
   /// + polygons_visited * 100
   /// + events_count * 100
+  ///
+  /// Stored as `profiles.rating` for leaderboards;
+  /// clan rating = SUM(member XP).
   int calculate({
     required int gamesPlayed,
     required int wins,
@@ -69,6 +73,9 @@ class LevelService {
       eventsCount: eventsCount,
     );
   }
+
+  /// Minimum player level required to create a clan.
+  static const minLevelToCreateClan = 3;
 
   int xpRequiredForLevel(int level) {
     if (level < 1) return 200;

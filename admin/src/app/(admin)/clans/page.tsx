@@ -56,7 +56,7 @@ export default function ClansPage() {
     <div>
       <PageHeader
         title="Кланы"
-        description="Рейтинг клана = сумма рейтингов участников (только отображение)"
+        description="Рейтинг клана = сумма XP участников (только отображение)"
         actions={
           <Button type="button" onClick={() => setEditing("new")}>
             Создать
@@ -90,6 +90,7 @@ export default function ClansPage() {
                 <th>Эмблема</th>
                 <th>Название</th>
                 <th>TAG</th>
+                <th>Город</th>
                 <th>Лидер</th>
                 <th>Участники</th>
                 <th>Рейтинг</th>
@@ -107,6 +108,7 @@ export default function ClansPage() {
                   <td>
                     <Badge tone="lime">{c.tag}</Badge>
                   </td>
+                  <td className="text-graphite-400">{c.city || "—"}</td>
                   <td>
                     {c.leader_id ? (
                       <Link
@@ -272,11 +274,17 @@ function ClanMembersPanel({
                 <div className="text-sm text-white">
                   {m.nickname}{" "}
                   <Badge tone={m.role === "leader" ? "lime" : "neutral"}>
-                    {m.role}
+                    {m.role === "leader"
+                      ? "Командир"
+                      : m.role === "officer"
+                        ? "Заместитель"
+                        : m.role === "trainer"
+                          ? "Тренер"
+                          : "Боец"}
                   </Badge>
                 </div>
                 <div className="text-[12px] text-graphite-600">
-                  {m.city} · рейтинг {formatNumber(m.rating)}
+                  {m.city} · XP {formatNumber(m.rating)}
                 </div>
               </div>
             </div>
@@ -309,6 +317,7 @@ function ClanFormModal({
   const [name, setName] = useState(initial?.name ?? "");
   const [tag, setTag] = useState(initial?.tag ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  const [city, setCity] = useState(initial?.city ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(
     initial?.avatar_url ?? null,
   );
@@ -342,6 +351,12 @@ function ClanFormModal({
             value={tag}
             onChange={(e) => setTag(e.target.value)}
           />
+          <input
+            className="admin-input"
+            placeholder="Местоположение (город)"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+          />
           <textarea
             className="admin-input min-h-[70px]"
             placeholder="Описание"
@@ -356,7 +371,7 @@ function ClanFormModal({
             label="Эмблема"
           />
           <div className="rounded border border-graphite-800 bg-graphite-950/40 px-3 py-2 text-[12px] text-graphite-600">
-            Рейтинг клана считается автоматически как сумма рейтингов участников.
+            Рейтинг клана считается автоматически как сумма XP участников.
             Ручное изменение недоступно.
           </div>
           {!initial || true ? (
@@ -402,6 +417,7 @@ function ClanFormModal({
                     name,
                     tag,
                     description,
+                    city: city.trim() || null,
                     avatarUrl,
                     clearAvatar: !avatarUrl,
                     leaderId: leaderId || undefined,

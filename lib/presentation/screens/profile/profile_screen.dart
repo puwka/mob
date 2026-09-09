@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../data/repositories/profile_photo_repository.dart';
 import '../../../domain/models/profile.dart';
 import '../../../domain/models/user_achievement_progress.dart';
 import '../../../presentation/providers/auth_providers.dart';
@@ -20,6 +21,7 @@ import '../../../widgets/app_card.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/level_progress_bar.dart';
 import '../../../widgets/level_up_overlay.dart';
+import '../../../widgets/role_badge.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -40,33 +42,67 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final eventsCount = ref.watch(userEventsCountProvider).valueOrNull ?? 0;
 
     ref.listen(levelProgressProvider, (previous, next) {
-      final prevLevel = ref.read(previousLevelProvider);
-      if (prevLevel != null && next.currentLevel > prevLevel) {
+      final profile = ref.read(currentProfileProvider).valueOrNull;
+      if (profile == null) return;
+
+      // Wait until events count is known so XP isn't undercounted.
+      final eventsAsync = ref.read(userEventsCountProvider);
+      if (!eventsAsync.hasValue) return;
+
+      final stored = ref.read(previousLevelProvider);
+      if (stored != null && next.currentLevel > stored) {
         setState(() => _levelUpTo = next.currentLevel);
+        ref.read(previousLevelProvider.notifier).state = next.currentLevel;
+        return;
       }
-      ref.read(previousLevelProvider.notifier).state = next.currentLevel;
+
+      // Initialize or keep the highest known level — never regress on
+      // transient recalculations (profile/events loading flash).
+      if (stored == null || next.currentLevel > stored) {
+        ref.read(previousLevelProvider.notifier).state = next.currentLevel;
+      }
     });
 
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
+        leadingWidth: 88,
+        leading: TextButton(
+          onPressed: () {
+            ref.read(rankingEntityTabProvider.notifier).state =
+                RankingEntityTab.players;
+            ref.read(rankingScopeTabProvider.notifier).state =
+                RankingScopeTab.global;
+            ref.read(rankingHighlightMeProvider.notifier).state = true;
+            context.push('/main/profile/rating');
+          },
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.accent,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: const Text(
+            'Рейтинг',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+          ),
+        ),
         title: const Text('Боевой паспорт'),
         actions: [
           TextButton(
-            onPressed: () {
-              ref.read(rankingEntityTabProvider.notifier).state =
-                  RankingEntityTab.players;
-              ref.read(rankingScopeTabProvider.notifier).state =
-                  RankingScopeTab.global;
-              ref.read(rankingHighlightMeProvider.notifier).state = true;
-              context.push('/main/profile/rating');
-            },
+            onPressed: () => context.push('/main/profile/dating'),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.accent,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
-            child: const Text(
-              'Рейтинг',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.groups_outlined, size: 16),
+                SizedBox(width: 4),
+                Text(
+                  'dating',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+                ),
+              ],
             ),
           ),
           IconButton(
@@ -146,9 +182,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     if (confirmed != true) return;
-    ref.read(previousLevelProvider.notifier).state = null;
-    ref.invalidate(achievementsProvider);
-    ref.invalidate(userEventsCountProvider);
     await ref.read(authControllerProvider.notifier).logout();
     if (context.mounted) context.go('/login');
   }
@@ -188,14 +221,6 @@ class _PassportBody extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: _InfoCell(
-                      icon: Icons.badge_outlined,
-                      label: 'Роль',
-                      value: profile.isOrganizer ? 'Организатор' : 'Пользователь',
-                    ),
-                  ),
-                  Container(width: 1, height: 42, color: AppColors.borderSubtle),
-                  Expanded(
-                    child: _InfoCell(
                       icon: Icons.sports_martial_arts_outlined,
                       label: 'Класс',
                       value: (profile.gameRole == null ||
@@ -204,10 +229,10 @@ class _PassportBody extends ConsumerWidget {
                           : profile.gameRole!,
                     ),
                   ),
+                  Container(width: 1, height: 42, color: AppColors.borderSubtle),
+                  const Expanded(child: _ClanInfoCell()),
                 ],
               ),
-              const SizedBox(height: 8),
-              const _ClanInfoCell(),
             ],
           ),
         ),
@@ -296,35 +321,6 @@ class _PassportBody extends ConsumerWidget {
                   Container(width: 1, height: 48, color: AppColors.borderSubtle),
                   Expanded(
                     child: _StatCell(
-                      icon: Icons.trending_up,
-                      value: '${profile.rating}',
-                      label: 'Рейтинг игрока',
-                      onTap: () {
-                        ref.read(rankingEntityTabProvider.notifier).state =
-                            RankingEntityTab.players;
-                        ref.read(rankingScopeTabProvider.notifier).state =
-                            RankingScopeTab.global;
-                        ref.read(rankingHighlightMeProvider.notifier).state =
-                            true;
-                        context.push('/main/profile/rating');
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatCell(
-                      icon: Icons.emoji_events_outlined,
-                      value: '${profile.wins}',
-                      label: 'Победы',
-                    ),
-                  ),
-                  Container(width: 1, height: 48, color: AppColors.borderSubtle),
-                  Expanded(
-                    child: _StatCell(
                       icon: Icons.event_available_outlined,
                       value: '$eventsCount',
                       label: 'Мероприятия',
@@ -405,59 +401,65 @@ class _PassportBody extends ConsumerWidget {
                   onTap: () => context.push('/main/profile/photos'),
                 ),
               ),
-              SizedBox(
-                height: 72,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: 4,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    if (index < photos.length) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: AspectRatio(
-                          aspectRatio: 1,
-                          child: Image.network(
-                            photos[index].url,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                              color: AppColors.surfaceElevated,
-                              child: const Icon(
-                                Icons.image_outlined,
-                                color: AppColors.textTertiary,
-                                size: 18,
-                              ),
-                            ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  const max = ProfilePhotoRepository.maxPhotos;
+                  const gap = 8.0;
+                  final cell =
+                      (constraints.maxWidth - gap * (max - 1)) / max;
+                  return SizedBox(
+                    height: cell,
+                    child: Row(
+                      children: [
+                        for (var index = 0; index < max; index++) ...[
+                          if (index > 0) const SizedBox(width: gap),
+                          Expanded(
+                            child: index < photos.length
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.network(
+                                      photos[index].url,
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
+                                        color: AppColors.surfaceElevated,
+                                        child: const Icon(
+                                          Icons.image_outlined,
+                                          color: AppColors.textTertiary,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Material(
+                                    color: AppColors.surfaceElevated,
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: InkWell(
+                                      onTap: () => context
+                                          .push('/main/profile/photos'),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.add,
+                                          color: AppColors.accent,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                           ),
-                        ),
-                      );
-                    }
-
-                    return Material(
-                      color: AppColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        onTap: () => context.push('/main/profile/photos'),
-                        borderRadius: BorderRadius.circular(10),
-                        child: const SizedBox(
-                          width: 72,
-                          height: 72,
-                          child: Icon(
-                            Icons.add,
-                            color: AppColors.accent,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 6),
               Text(
-                '${photos.length} / 4',
+                '${photos.length} / ${ProfilePhotoRepository.maxPhotos}',
                 style: const TextStyle(
                   color: AppColors.textTertiary,
                   fontSize: 11.5,
@@ -492,11 +494,22 @@ class _HeaderBlock extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      profile.nickname,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontSize: 18,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            profile.nickname,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontSize: 18),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        RoleBadge(role: profile.badgeRole),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(

@@ -8,8 +8,10 @@ import {
   LoadingBlock,
   PageHeader,
 } from "@/components/ui/page";
-import { adjustBalance, fetchUserDetail, setAppRole, setUserStatus, updateProfileAdmin } from "@/lib/api/admin";
+import { adjustBalance, fetchPanelRole, fetchUserDetail, setAppRole, setPanelRole, setUserStatus, updateProfileAdmin } from "@/lib/api/admin";
 import { CITIES } from "@/lib/constants";
+import type { AdminRole } from "@/lib/types";
+import { useAuth } from "@/providers/auth-provider";
 import { usePermissions } from "@/hooks/use-permissions";
 import { formatDate, formatNumber } from "@/lib/utils";
 import {
@@ -30,12 +32,24 @@ export default function UserDetailPage() {
   const userId = params.id;
   const queryClient = useQueryClient();
   const { can } = usePermissions();
+  const { admin } = useAuth();
   const [message, setMessage] = useState<string | null>(null);
+  const [panelRoleDraft, setPanelRoleDraft] = useState<string>("");
 
   const detailQuery = useQuery({
     queryKey: ["admin-user", userId],
     queryFn: () => fetchUserDetail(userId),
   });
+
+  const panelRoleQuery = useQuery({
+    queryKey: ["admin-panel-role", userId],
+    queryFn: () => fetchPanelRole(userId),
+    enabled: !!userId && (admin?.role === "super_admin" || admin?.role === "admin"),
+  });
+
+  useEffect(() => {
+    setPanelRoleDraft(panelRoleQuery.data ?? "");
+  }, [panelRoleQuery.data]);
 
   const user = detailQuery.data?.user;
 
@@ -95,6 +109,22 @@ export default function UserDetailPage() {
     onError: (err: Error) => setMessage(err.message),
   });
 
+  const panelRoleMutation = useMutation({
+    mutationFn: (role: AdminRole | null) => setPanelRole(userId, role),
+    onSuccess: async (role) => {
+      setMessage(
+        role
+          ? `Доступ в админку: ${role}`
+          : "Доступ в админку снят",
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["admin-panel-role", userId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-audit-logs"] });
+    },
+    onError: (err: Error) => setMessage(err.message),
+  });
+
   const balanceForm = useForm<BalanceAdjustValues>({
     resolver: zodResolver(balanceAdjustSchema),
     defaultValues: { amount: 100, reason: "Корректировка админом" },
@@ -149,7 +179,7 @@ export default function UserDetailPage() {
             </Badge>
           </div>
           <div className="mt-1 text-sm text-graphite-600">
-            {user.phone} · {user.city} · рейтинг {formatNumber(user.rating)}
+            {user.phone} · {user.city} · XP {formatNumber(user.rating)}
             {user.clan_name ? ` · клан ${user.clan_name}` : ""}
           </div>
         </div>
@@ -191,6 +221,63 @@ export default function UserDetailPage() {
         </div>
       </div>
 
+      {(admin?.role === "super_admin" || admin?.role === "admin") &&
+      admin.id !== userId ? (
+        <div className="mb-5 admin-card space-y-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-white">
+                Доступ в админ-панель
+              </h2>
+              <p className="mt-1 text-[12px] text-graphite-600">
+                Модератор: барахолка + городские чаты + мут. Сейчас:{" "}
+                {panelRoleQuery.data ?? "нет"}
+              </p>
+            </div>
+            {panelRoleQuery.data ? (
+              <Badge tone="lime">{panelRoleQuery.data}</Badge>
+            ) : (
+              <Badge tone="neutral">нет доступа</Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-[180px] flex-1 text-[12px] text-graphite-600">
+              Роль
+              <select
+                className="admin-input mt-1"
+                value={panelRoleDraft}
+                onChange={(e) => setPanelRoleDraft(e.target.value)}
+              >
+                <option value="">Нет доступа</option>
+                <option value="moderator">moderator</option>
+                {admin.role === "super_admin" ? (
+                  <>
+                    <option value="admin">admin</option>
+                    <option value="super_admin">super_admin</option>
+                  </>
+                ) : null}
+              </select>
+            </label>
+            <Button
+              type="button"
+              disabled={
+                panelRoleMutation.isPending ||
+                panelRoleDraft === (panelRoleQuery.data ?? "")
+              }
+              onClick={() =>
+                panelRoleMutation.mutate(
+                  panelRoleDraft
+                    ? (panelRoleDraft as AdminRole)
+                    : null,
+                )
+              }
+            >
+              Сохранить доступ
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 xl:grid-cols-2">
         <form
           className="admin-card space-y-3 p-4"
@@ -230,11 +317,12 @@ export default function UserDetailPage() {
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Rating">
+            <Field label="XP (рейтинг)">
               <input
-                className="admin-input"
+                className="admin-input opacity-70"
                 type="number"
-                {...form.register("rating", { valueAsNumber: true })}
+                readOnly
+                value={form.watch("rating") ?? 0}
               />
             </Field>
             <Field label="Games">

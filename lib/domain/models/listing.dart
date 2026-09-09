@@ -132,6 +132,7 @@ class Listing {
     required this.viewsCount,
     required this.isPromoted,
     this.promotedUntil,
+    this.boostedAt,
     required this.createdAt,
     required this.updatedAt,
     this.sellerNickname,
@@ -153,6 +154,7 @@ class Listing {
   final int viewsCount;
   final bool isPromoted;
   final DateTime? promotedUntil;
+  final DateTime? boostedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? sellerNickname;
@@ -210,6 +212,7 @@ class Listing {
       viewsCount: viewsCount ?? this.viewsCount,
       isPromoted: isPromoted,
       promotedUntil: promotedUntil,
+      boostedAt: boostedAt,
       createdAt: createdAt,
       updatedAt: updatedAt,
       sellerNickname: sellerNickname ?? this.sellerNickname,
@@ -274,6 +277,9 @@ class Listing {
       promotedUntil: json['promoted_until'] == null
           ? null
           : DateTime.parse(json['promoted_until'] as String),
+      boostedAt: json['boosted_at'] == null
+          ? null
+          : DateTime.parse(json['boosted_at'] as String),
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       sellerNickname: sellerNick,
