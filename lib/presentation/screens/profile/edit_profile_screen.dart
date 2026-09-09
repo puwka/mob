@@ -5,12 +5,14 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/validators.dart';
+import '../../../domain/models/profile.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/profile_providers.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_text_field.dart';
 import '../../../widgets/city_picker.dart';
 import '../../../widgets/feedback.dart';
+import '../../../widgets/role_badge.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -23,7 +25,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nickname;
   late final TextEditingController _city;
-  late final TextEditingController _bio;
+  GameRole? _gameRole;
   String? _error;
   bool _initialized = false;
 
@@ -32,16 +34,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     if (_initialized) {
       _nickname.dispose();
       _city.dispose();
-      _bio.dispose();
     }
     super.dispose();
   }
 
-  void _ensureControllers(String nickname, String city, String? bio) {
+  void _ensureControllers(Profile profile) {
     if (_initialized) return;
-    _nickname = TextEditingController(text: nickname);
-    _city = TextEditingController(text: city);
-    _bio = TextEditingController(text: bio ?? '');
+    _nickname = TextEditingController(text: profile.nickname);
+    _city = TextEditingController(text: profile.city);
+    _gameRole = profile.parsedGameRole;
     _initialized = true;
   }
 
@@ -89,12 +90,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     setState(() => _error = null);
     if (!_formKey.currentState!.validate()) return;
 
-    final bio = _bio.text.trim();
+    if (_gameRole == null) {
+      setState(() => _error = 'Выберите игровую роль');
+      return;
+    }
+
     await ref.read(profileControllerProvider.notifier).updateProfile(
           nickname: _nickname.text.trim(),
           city: _city.text.trim(),
-          bio: bio,
-          clearBio: bio.isEmpty,
+          gameRole: _gameRole!.dbValue,
         );
 
     final state = ref.read(profileControllerProvider);
@@ -126,7 +130,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       );
     }
 
-    _ensureControllers(profile.nickname, profile.city, profile.bio);
+    _ensureControllers(profile);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Редактирование')),
@@ -185,15 +189,26 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                AppTextField(
-                  controller: _bio,
-                  label: 'О себе',
-                  hint: 'Кратко о себе, роли, команде…',
-                  enabled: !saving,
-                  maxLines: 5,
-                  minLines: 3,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
+                Text(
+                  'Роль',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 12.5,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final role in GameRole.values)
+                      _GameRoleChoice(
+                        role: role,
+                        selected: _gameRole == role,
+                        enabled: !saving,
+                        onTap: () => setState(() => _gameRole = role),
+                      ),
+                  ],
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
@@ -207,6 +222,62 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GameRoleChoice extends StatelessWidget {
+  const _GameRoleChoice({
+    required this.role,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final GameRole role;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.accentSoft : AppColors.surfaceElevated,
+      borderRadius: BorderRadius.circular(AppRadii.chip),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(AppRadii.chip),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.chip),
+            border: Border.all(
+              color: selected ? AppColors.accentDim : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                gameRoleIcon(role),
+                size: 18,
+                color: selected ? AppColors.accent : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                role.labelRu,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       ),

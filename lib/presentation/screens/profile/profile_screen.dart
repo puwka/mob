@@ -18,6 +18,7 @@ import '../../../services/achievement_service.dart';
 import '../../../services/level_service.dart';
 import '../../../widgets/achievement_card.dart';
 import '../../../widgets/app_card.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/level_progress_bar.dart';
 import '../../../widgets/level_up_overlay.dart';
@@ -120,6 +121,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: Stack(
         children: [
           profileAsync.when(
+            skipLoadingOnReload: true,
+            skipLoadingOnRefresh: true,
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => AsyncErrorRetry(
               message: ErrorMapper.map(e),
@@ -137,9 +140,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               return RefreshIndicator(
                 color: AppColors.accent,
                 onRefresh: () async {
-                  await ref.read(currentProfileProvider.notifier).refresh();
-                  await ref.read(userEventsCountProvider.notifier).refresh();
-                  await ref.read(achievementsProvider.notifier).refresh();
+                  await Future.wait([
+                    ref
+                        .read(currentProfileProvider.notifier)
+                        .refresh(silent: true),
+                    ref.read(userEventsCountProvider.notifier).refresh(),
+                    ref.read(achievementsProvider.notifier).refresh(),
+                  ]);
                 },
                 child: _PassportBody(
                   profile: profile,
@@ -223,10 +230,7 @@ class _PassportBody extends ConsumerWidget {
                     child: _InfoCell(
                       icon: Icons.sports_martial_arts_outlined,
                       label: 'Класс',
-                      value: (profile.gameRole == null ||
-                              profile.gameRole!.isEmpty)
-                          ? 'Не указан'
-                          : profile.gameRole!,
+                      value: profile.gameRoleLabel,
                     ),
                   ),
                   Container(width: 1, height: 42, color: AppColors.borderSubtle),
@@ -498,7 +502,7 @@ class _HeaderBlock extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            profile.nickname,
+                            'Позывной: ${profile.nickname}',
                             style: Theme.of(context)
                                 .textTheme
                                 .titleLarge
@@ -508,15 +512,8 @@ class _HeaderBlock extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        RoleBadge(role: profile.badgeRole),
+                        ProfileNameBadges(badgeRole: profile.badgeRole),
                       ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Позывной: ${profile.nickname}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontSize: 12.5,
-                          ),
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -538,7 +535,7 @@ class _HeaderBlock extends StatelessWidget {
                   ],
                 ),
               ),
-              const _Emblem(),
+              _Emblem(gameRole: profile.parsedGameRole),
             ],
           ),
           const SizedBox(height: 14),
@@ -593,19 +590,15 @@ class _Avatar extends StatelessWidget {
           ),
           clipBehavior: Clip.antiAlias,
           child: url != null && url!.isNotEmpty
-              ? Image.network(
-                  url!,
+              ? AppNetworkImage(
+                  url: url,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Text(
-                      letter,
-                      style: const TextStyle(
-                        color: AppColors.accent,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  width: 88,
+                  height: 88,
+                  memCacheWidth: 200,
+                  memCacheHeight: 200,
+                  debugLabel: 'profile-avatar',
+                  placeholderIcon: Icons.person_outline,
                 )
               : Center(
                   child: Text(
@@ -637,10 +630,13 @@ class _Avatar extends StatelessWidget {
 }
 
 class _Emblem extends StatelessWidget {
-  const _Emblem();
+  const _Emblem({this.gameRole});
+
+  final GameRole? gameRole;
 
   @override
   Widget build(BuildContext context) {
+    final icon = gameRole != null ? gameRoleIcon(gameRole!) : Icons.shield;
     return Container(
       width: 44,
       height: 44,
@@ -649,7 +645,7 @@ class _Emblem extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.gold.withValues(alpha: 0.55)),
       ),
-      child: const Icon(Icons.shield, color: AppColors.gold, size: 22),
+      child: Icon(icon, color: AppColors.gold, size: 22),
     );
   }
 }

@@ -249,6 +249,8 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
             const SizedBox(height: 8),
             Expanded(
               child: listingsAsync.when(
+                skipLoadingOnReload: true,
+                skipLoadingOnRefresh: true,
                 loading: () => const Center(
                   child: SizedBox(
                     width: 28,

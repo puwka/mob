@@ -2,12 +2,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/app_exception.dart';
 import '../../core/utils/error_mapper.dart';
+import '../../core/utils/perf_log.dart';
 import '../../domain/models/listing.dart';
 
 class ListingRepository {
   ListingRepository(this._client);
 
   final SupabaseClient _client;
+
+  static const feedPageSize = 24;
 
   static const _selectLite = '''
     id,
@@ -28,11 +31,14 @@ class ListingRepository {
 
   Future<List<MarketCategory>> fetchCategories() async {
     try {
-      final rows = await _client
-          .from('categories')
-          .select('id, name, parent_id, icon, sort_order, created_at')
-          .order('sort_order', ascending: true)
-          .timeout(const Duration(seconds: 15));
+      final rows = await PerfLog.time(
+        'categories',
+        () => _client
+            .from('categories')
+            .select('id, name, parent_id, icon, sort_order, created_at')
+            .order('sort_order', ascending: true)
+            .timeout(const Duration(seconds: 15)),
+      );
       return (rows as List)
           .map((e) => MarketCategory.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
@@ -41,14 +47,20 @@ class ListingRepository {
     }
   }
 
-  Future<List<Listing>> fetchListings(ListingFilters filters) async {
+  Future<List<Listing>> fetchListings(
+    ListingFilters filters, {
+    int limit = feedPageSize,
+    int offset = 0,
+  }) async {
     try {
       final rows = await _runFeedQuery(
         filters: filters,
         categoryIds: null,
+        limit: limit,
+        offset: offset,
       );
       final list = _mapRows(rows);
-      return _attachImagesAndFavorites(list);
+      return _attachCoversAndFavorites(list);
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
     }
@@ -58,17 +70,21 @@ class ListingRepository {
   Future<List<Listing>> fetchListingsInCategories(
     ListingFilters filters, {
     required List<String> categoryIds,
+    int limit = feedPageSize,
+    int offset = 0,
   }) async {
     try {
       if (categoryIds.isEmpty) {
-        return fetchListings(filters);
+        return fetchListings(filters, limit: limit, offset: offset);
       }
       final rows = await _runFeedQuery(
         filters: filters,
         categoryIds: categoryIds,
+        limit: limit,
+        offset: offset,
       );
       final list = _mapRows(rows);
-      return _attachImagesAndFavorites(list);
+      return _attachCoversAndFavorites(list);
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
     }
@@ -77,18 +93,27 @@ class ListingRepository {
   Future<dynamic> _runFeedQuery({
     required ListingFilters filters,
     required List<String>? categoryIds,
+    int limit = feedPageSize,
+    int offset = 0,
   }) async {
-    return _executeFeed(
-      select: _selectLite,
-      filters: filters,
-      categoryIds: categoryIds,
-    ).timeout(const Duration(seconds: 20));
+    return PerfLog.time(
+      'listings feed limit=$limit offset=$offset',
+      () => _executeFeed(
+        select: _selectLite,
+        filters: filters,
+        categoryIds: categoryIds,
+        limit: limit,
+        offset: offset,
+      ).timeout(const Duration(seconds: 20)),
+    );
   }
 
   Future<dynamic> _executeFeed({
     required String select,
     required ListingFilters filters,
     required List<String>? categoryIds,
+    required int limit,
+    required int offset,
   }) {
     var query = _client.from('listings').select(select).eq('status', 'active');
 
@@ -126,7 +151,7 @@ class ListingRepository {
       query = query.or('title.ilike.%$safe%,description.ilike.%$safe%');
     }
 
-    return switch (filters.sort) {
+    final ordered = switch (filters.sort) {
       ListingSort.newest => query
           .order('is_promoted', ascending: false)
           .order('boosted_at', ascending: false, nullsFirst: false)
@@ -144,6 +169,8 @@ class ListingRepository {
           .order('boosted_at', ascending: false, nullsFirst: false)
           .order('views_count', ascending: false),
     };
+
+    return ordered.range(offset, offset + limit - 1);
   }
 
   List<Listing> _mapRows(dynamic rows) {
@@ -154,42 +181,52 @@ class ListingRepository {
 
   Future<Listing> fetchById(String id) async {
     try {
-      final row = await _client
-          .from('listings')
-          .select(_selectLite)
-          .eq('id', id)
-          .single()
-          .timeout(const Duration(seconds: 15));
+      final row = await PerfLog.time(
+        'listing detail $id',
+        () => _client
+            .from('listings')
+            .select(_selectLite)
+            .eq('id', id)
+            .single()
+            .timeout(const Duration(seconds: 15)),
+      );
       var listing = Listing.fromJson(Map<String, dynamic>.from(row));
 
-      try {
-        final imgs = await _client
+      final results = await Future.wait([
+        _client
             .from('listing_images')
             .select('id, listing_id, url, sort_order, created_at')
             .eq('listing_id', id)
             .order('sort_order', ascending: true)
-            .timeout(const Duration(seconds: 10));
-        final images = (imgs as List)
-            .map((e) => ListingImage.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList();
-        listing = listing.copyWith(images: images);
-      } catch (_) {}
-
-      try {
-        final seller = await _client
+            .timeout(const Duration(seconds: 10))
+            .then<List<ListingImage>>((imgs) {
+          return (imgs as List)
+              .map(
+                (e) =>
+                    ListingImage.fromJson(Map<String, dynamic>.from(e as Map)),
+              )
+              .toList();
+        }).catchError((_) => const <ListingImage>[]),
+        _client
             .from('profiles')
             .select('nickname')
             .eq('id', listing.sellerId)
             .maybeSingle()
-            .timeout(const Duration(seconds: 8));
-        final nick = seller?['nickname'] as String?;
-        if (nick != null) {
-          listing = listing.copyWith(sellerNickname: nick);
-        }
-      } catch (_) {}
+            .timeout(const Duration(seconds: 8))
+            .then<String?>((seller) => seller?['nickname'] as String?)
+            .catchError((_) => null),
+        _isFavorite(id),
+      ]);
 
-      final fav = await _isFavorite(id);
-      return listing.copyWith(isFavorite: fav);
+      final images = results[0] as List<ListingImage>;
+      final nick = results[1] as String?;
+      final fav = results[2] as bool;
+
+      return listing.copyWith(
+        images: images,
+        sellerNickname: nick ?? listing.sellerNickname,
+        isFavorite: fav,
+      );
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
     }
@@ -217,7 +254,7 @@ class ListingRepository {
       final list = (rows as List)
           .map((e) => Listing.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
-      return _attachImagesAndFavorites(list);
+      return _attachCoversAndFavorites(list);
     } catch (e) {
       if (e is AppException) rethrow;
       throw AppException(ErrorMapper.map(e));
@@ -401,27 +438,36 @@ class ListingRepository {
     }
   }
 
-  Future<List<Listing>> _attachImagesAndFavorites(List<Listing> list) async {
+  /// Feed: only first cover per listing (details load full gallery).
+  Future<List<Listing>> _attachCoversAndFavorites(List<Listing> list) async {
     if (list.isEmpty) return list;
 
     var withImages = list;
     try {
       final ids = list.map((e) => e.id).toList();
-      final rows = await _client
-          .from('listing_images')
-          .select('id, listing_id, url, sort_order, created_at')
-          .inFilter('listing_id', ids)
-          .order('sort_order', ascending: true)
-          .timeout(const Duration(seconds: 12));
+      final rows = await PerfLog.time(
+        'listing covers n=${ids.length}',
+        () => _client
+            .from('listing_images')
+            .select('id, listing_id, url, sort_order, created_at')
+            .inFilter('listing_id', ids)
+            .order('sort_order', ascending: true)
+            .timeout(const Duration(seconds: 12)),
+        channel: 'STORAGE',
+      );
 
-      final byListing = <String, List<ListingImage>>{};
+      final byListing = <String, ListingImage>{};
       for (final row in rows as List) {
         final img = ListingImage.fromJson(Map<String, dynamic>.from(row as Map));
-        byListing.putIfAbsent(img.listingId, () => []).add(img);
+        byListing.putIfAbsent(img.listingId, () => img);
       }
       withImages = [
         for (final item in list)
-          item.copyWith(images: byListing[item.id] ?? const []),
+          item.copyWith(
+            images: byListing.containsKey(item.id)
+                ? [byListing[item.id]!]
+                : const [],
+          ),
       ];
     } catch (_) {
       // Feed still works without covers.

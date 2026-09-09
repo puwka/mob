@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../core/theme/app_colors.dart';
 import '../domain/models/listing.dart';
+import 'app_network_image.dart';
 
 /// Compact listing row: image left, info right, favorite top-right.
 class ListingCard extends StatelessWidget {
@@ -50,29 +51,15 @@ class ListingCard extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      cover == null || cover.isEmpty
-                          ? Container(
-                              color: AppColors.surfaceElevated,
-                              child: const Icon(
-                                Icons.image_outlined,
-                                color: AppColors.textTertiary,
-                                size: 22,
-                              ),
-                            )
-                          : Image.network(
-                              cover,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                color: AppColors.surfaceElevated,
-                                child: const Icon(
-                                  Icons.broken_image_outlined,
-                                  color: AppColors.textTertiary,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
+                      AppNetworkImage(
+                        url: cover,
+                        fit: BoxFit.cover,
+                        width: 96,
+                        height: 104,
+                        memCacheWidth: 240,
+                        memCacheHeight: 260,
+                        debugLabel: 'listing-cover',
+                      ),
                       if (listing.isPromotionActive)
                         Positioned(
                           left: 6,

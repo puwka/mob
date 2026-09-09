@@ -84,10 +84,7 @@ class UserProfileScreen extends ConsumerWidget {
                           child: _InfoCell(
                             icon: Icons.sports_martial_arts_outlined,
                             label: 'Класс',
-                            value: (profile.gameRole == null ||
-                                    profile.gameRole!.isEmpty)
-                                ? 'Не указан'
-                                : profile.gameRole!,
+                            value: profile.gameRoleLabel,
                           ),
                         ),
                         Container(
@@ -127,26 +124,6 @@ class UserProfileScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (profile.bio != null && profile.bio!.trim().isNotEmpty) ...[
-                const SizedBox(height: 10),
-                AppCard(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SectionTitle(title: 'О себе'),
-                      Text(
-                        profile.bio!,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          height: 1.4,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
               const SizedBox(height: 10),
               AppCard(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -340,7 +317,7 @@ class _PublicHeader extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        RoleBadge(role: profile.badgeRole),
+                        ProfileNameBadges(badgeRole: profile.badgeRole),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -379,7 +356,13 @@ class _PublicHeader extends StatelessWidget {
                     color: AppColors.gold.withValues(alpha: 0.55),
                   ),
                 ),
-                child: const Icon(Icons.shield, color: AppColors.gold, size: 22),
+                child: Icon(
+                  profile.parsedGameRole != null
+                      ? gameRoleIcon(profile.parsedGameRole!)
+                      : Icons.shield,
+                  color: AppColors.gold,
+                  size: 22,
+                ),
               ),
             ],
           ),

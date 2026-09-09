@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/event_cities.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../core/utils/event_cover.dart';
 import '../../../domain/models/event.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/repository_providers.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/event_list_skeleton.dart';
 import '../../../widgets/feedback.dart';
 
@@ -114,7 +116,7 @@ class EventsScreen extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
                     itemCount: events.length,
                     separatorBuilder: (context, index) =>
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final event = events[index];
                       return EventRowCard(
@@ -133,7 +135,7 @@ class EventsScreen extends ConsumerWidget {
   }
 }
 
-/// Compact event row: visual left + info right (reference-like).
+/// Compact event row: fixed-size thumb + info (all cards same height).
 class EventRowCard extends StatelessWidget {
   const EventRowCard({
     super.key,
@@ -148,6 +150,8 @@ class EventRowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = DateFormat('d MMM', 'ru').format(event.eventDate.toLocal());
     final time = DateFormat('HH:mm', 'ru').format(event.eventDate.toLocal());
+    const h = EventCoverSpecs.listCardHeight;
+    const thumbW = EventCoverSpecs.listThumbWidth;
 
     return Material(
       color: Colors.transparent,
@@ -155,6 +159,7 @@ class EventRowCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadii.card),
         child: Container(
+          height: h,
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(AppRadii.card),
@@ -165,112 +170,111 @@ class EventRowCard extends StatelessWidget {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: 92,
-                  child: event.imageUrl == null || event.imageUrl!.isEmpty
-                      ? Container(
-                          color: AppColors.surfaceElevated,
-                          child: const Icon(
+          child: Row(
+            children: [
+              SizedBox(
+                width: thumbW,
+                height: h,
+                child: event.imageUrl == null || event.imageUrl!.isEmpty
+                    ? const ColoredBox(
+                        color: AppColors.surfaceElevated,
+                        child: Center(
+                          child: Icon(
                             Icons.image_outlined,
                             color: AppColors.textTertiary,
-                            size: 22,
+                            size: 26,
                           ),
-                        )
-                      : Image.network(
-                          event.imageUrl!,
+                        ),
+                      )
+                      : AppNetworkImage(
+                          url: event.imageUrl,
+                          width: thumbW,
+                          height: h,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                            color: AppColors.surfaceElevated,
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              color: AppColors.textTertiary,
-                              size: 20,
+                          memCacheWidth: 280,
+                          memCacheHeight: 280,
+                          debugLabel: 'event-cover',
+                        ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        event.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w700,
                             ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${event.city} · $date · $time',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontSize: 12,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        event.location,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontSize: 12,
+                            ),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          Text(
+                            '${event.participantsCount}/${event.maxParticipants}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  color: AppColors.accent,
+                                  fontSize: 13.5,
+                                ),
                           ),
-                        ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          event.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontSize: 14.5,
-                              ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${event.city} · $date · $time',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontSize: 11.5,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          event.location,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontSize: 11.5,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
+                          const Spacer(),
+                          if (event.isParticipating)
                             Text(
-                              '${event.participantsCount}/${event.maxParticipants}',
+                              'Вы в составе',
                               style: Theme.of(context)
                                   .textTheme
-                                  .titleMedium
+                                  .labelMedium
                                   ?.copyWith(
                                     color: AppColors.accent,
-                                    fontSize: 13,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            )
+                          else
+                            Text(
+                              event.isFull ? 'Мест нет' : 'Открыто',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color: event.isFull
+                                        ? AppColors.warning
+                                        : AppColors.textSecondary,
+                                    fontSize: 11.5,
                                   ),
                             ),
-                            const Spacer(),
-                            if (event.isParticipating)
-                              Text(
-                                'Вы в составе',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelMedium
-                                    ?.copyWith(
-                                      color: AppColors.accent,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                              )
-                            else
-                              Text(
-                                event.isFull ? 'Мест нет' : 'Открыто',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelMedium
-                                    ?.copyWith(
-                                      color: event.isFull
-                                          ? AppColors.warning
-                                          : AppColors.textSecondary,
-                                      fontSize: 11,
-                                    ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

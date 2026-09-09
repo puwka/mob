@@ -19,13 +19,19 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phone = TextEditingController();
+  final _phone = TextEditingController(text: '+7');
   final _password = TextEditingController();
   final _phoneFocus = FocusNode();
   final _passwordFocus = FocusNode();
 
   bool _obscure = true;
   String? _formError;
+
+  @override
+  void initState() {
+    super.initState();
+    _phone.selection = TextSelection.collapsed(offset: _phone.text.length);
+  }
 
   @override
   void dispose() {
@@ -91,7 +97,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       controller: _phone,
                       focusNode: _phoneFocus,
                       label: 'Телефон',
-                      hint: 'Номер телефона',
+                      hint: '+7 (___) ___-__-__',
                       keyboardType: TextInputType.phone,
                       textInputAction: TextInputAction.next,
                       prefixIcon: Icons.phone_outlined,

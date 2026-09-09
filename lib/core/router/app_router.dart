@@ -8,6 +8,7 @@ import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/polygon_providers.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
+import '../../presentation/screens/chats/chat_participants_screen.dart';
 import '../../presentation/screens/chats/chat_screen.dart';
 import '../../presentation/screens/chats/dialogs_screen.dart';
 import '../../presentation/screens/clans/clan_profile_screen.dart';
@@ -149,6 +150,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                       conversationId:
                           state.pathParameters['conversationId']!,
                     ),
+                    routes: [
+                      GoRoute(
+                        path: 'participants',
+                        builder: (context, state) => ChatParticipantsScreen(
+                          conversationId:
+                              state.pathParameters['conversationId']!,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -11,6 +11,7 @@ import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/market_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/app_button.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/listing_card.dart';
 
@@ -121,17 +122,13 @@ class _ListingDetailsScreenState extends ConsumerState<ListingDetailsScreen> {
                                 color: AppColors.textTertiary,
                                 size: 36,
                               )
-                            : Image.network(
-                                cover,
+                            : AppNetworkImage(
+                                url: cover,
                                 fit: BoxFit.contain,
                                 width: double.infinity,
                                 height: 320,
-                                alignment: Alignment.center,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    const Icon(
-                                  Icons.broken_image_outlined,
-                                  color: AppColors.textTertiary,
-                                ),
+                                memCacheWidth: 1200,
+                                debugLabel: 'listing-detail',
                               ),
                       ),
                     ),
@@ -160,9 +157,13 @@ class _ListingDetailsScreenState extends ConsumerState<ListingDetailsScreen> {
                                   ),
                                 ),
                                 clipBehavior: Clip.antiAlias,
-                                child: Image.network(
-                                  images[index].url,
+                                child: AppNetworkImage(
+                                  url: images[index].url,
                                   fit: BoxFit.cover,
+                                  width: 64,
+                                  height: 64,
+                                  memCacheWidth: 160,
+                                  debugLabel: 'listing-thumb',
                                 ),
                               ),
                             );

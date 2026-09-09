@@ -14,6 +14,7 @@ import 'package:proj/domain/models/profile.dart';
 import 'package:proj/domain/models/ranking.dart';
 import 'package:proj/services/achievement_service.dart';
 import 'package:proj/services/level_service.dart';
+import 'package:proj/services/offline_qr_store.dart';
 
 void main() {
   test('PhoneUtils normalizes RU numbers', () {
@@ -138,9 +139,11 @@ void main() {
 
     test('unlocks event achievements from eventsCount', () {
       final items = service.evaluate(
-        profile: profile(),
         catalog: catalog,
-        eventsCount: 5,
+        metrics: AchievementMetrics(
+          gamesPlayed: profile().gamesPlayed,
+          eventsCount: 5,
+        ),
       );
 
       final first = items.firstWhere((e) => e.achievement.id == 'a2');
@@ -155,9 +158,11 @@ void main() {
 
     test('progresses event achievements partially', () {
       final items = service.evaluate(
-        profile: profile(),
         catalog: catalog,
-        eventsCount: 3,
+        metrics: AchievementMetrics(
+          gamesPlayed: profile().gamesPlayed,
+          eventsCount: 3,
+        ),
       );
       final activist = items.firstWhere((e) => e.achievement.id == 'a3');
       expect(activist.unlocked, isFalse);
@@ -221,6 +226,8 @@ void main() {
       expect(p.appRole, AppRole.user);
       expect(p.isOrganizer, isFalse);
       expect(p.gameRole, 'Снайпер');
+      expect(p.parsedGameRole, GameRole.sniper);
+      expect(p.gameRoleLabel, 'Снайпер');
       expect(p.qrPayload, 'tactical:qr:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
       expect(p.qrPayload.contains('+79'), isFalse);
       expect(p.toInsertJson().containsKey('role'), isFalse);
@@ -249,6 +256,36 @@ void main() {
         'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
       );
       expect(EventRepository.parseQrToken('not-a-qr'), isNull);
+    });
+
+    test('EventParticipant includes public_qr_id for offline scan', () {
+      final p = EventParticipant.fromJson({
+        'id': 'ep1',
+        'event_id': 'e1',
+        'user_id': 'u1',
+        'registration_status': 'registered',
+        'attendance_status': 'not_confirmed',
+        'registered_at': '2026-01-01T00:00:00Z',
+        'profile': {
+          'nickname': 'Voron',
+          'city': 'Москва',
+          'public_qr_id': 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        },
+      });
+      expect(p.publicQrId, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+      expect(p.isConfirmed, isFalse);
+
+      final roster = OfflineEventRoster(
+        eventId: 'e1',
+        eventTitle: 'Игра',
+        cachedAt: DateTime.utc(2026, 1, 1),
+        participants: [p],
+      );
+      expect(
+        roster.findByPublicQrId('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')?.nickname,
+        'Voron',
+      );
+      expect(roster.findByPublicQrId('missing'), isNull);
     });
 
     test('AttendanceConfirmResult includes reward and balance', () {

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/utils/app_exception.dart';
 import '../core/utils/error_mapper.dart';
+import '../core/utils/event_cover.dart';
 
 class EventImageStorageService {
   EventImageStorageService(this._client);
@@ -19,14 +20,14 @@ class EventImageStorageService {
     required Uint8List bytes,
   }) async {
     try {
+      final normalized = await normalizeEventCoverBytes(bytes);
       final compressed = await FlutterImageCompress.compressWithList(
-        bytes,
-        minWidth: 1280,
-        minHeight: 720,
+        normalized,
         quality: 82,
         format: CompressFormat.jpeg,
       );
-      final data = compressed.isEmpty ? bytes : Uint8List.fromList(compressed);
+      final data =
+          compressed.isEmpty ? normalized : Uint8List.fromList(compressed);
       final path = '$organizerId/event_$eventId.jpg';
       await _client.storage.from(bucket).uploadBinary(
             path,

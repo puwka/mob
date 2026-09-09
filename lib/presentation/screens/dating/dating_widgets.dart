@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/models/dating.dart';
 
-/// Horizontal swipe photo pager with page dots.
+/// Horizontal swipe / tap photo pager with page dots.
 class DatingPhotoViewer extends StatefulWidget {
   const DatingPhotoViewer({
     super.key,
@@ -45,6 +45,28 @@ class _DatingPhotoViewerState extends State<DatingPhotoViewer> {
     super.dispose();
   }
 
+  void _goTo(int index) {
+    final photos = widget.photos;
+    if (photos.length <= 1) return;
+    final next = index.clamp(0, photos.length - 1);
+    if (next == _index) return;
+    _controller.animateToPage(
+      next,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _onTapSide(TapUpDetails details, BoxConstraints constraints) {
+    if (widget.photos.length <= 1) return;
+    final dx = details.localPosition.dx;
+    if (dx < constraints.maxWidth * 0.35) {
+      _goTo(_index - 1);
+    } else if (dx > constraints.maxWidth * 0.65) {
+      _goTo(_index + 1);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final photos = widget.photos;
@@ -61,102 +83,123 @@ class _DatingPhotoViewerState extends State<DatingPhotoViewer> {
       );
     }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        PageView.builder(
-          controller: _controller,
-          itemCount: photos.length,
-          onPageChanged: (i) {
-            setState(() => _index = i);
-            widget.onIndexChanged?.call(i);
-          },
-          itemBuilder: (context, i) {
-            return Image.network(
-              photos[i],
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.medium,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return const ColoredBox(
-                  color: AppColors.surfaceElevated,
-                  child: Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: photos.length > 1
+              ? (d) => _onTapSide(d, constraints)
+              : null,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              PageView.builder(
+                controller: _controller,
+                itemCount: photos.length,
+                physics: photos.length > 1
+                    ? const PageScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                onPageChanged: (i) {
+                  setState(() => _index = i);
+                  widget.onIndexChanged?.call(i);
+                },
+                itemBuilder: (context, i) {
+                return Image.network(
+                  photos[i],
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                  cacheWidth: 900,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const ColoredBox(
+                      color: AppColors.surfaceElevated,
+                      child: Center(
+                        child: SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    debugPrint('[STORAGE] IMAGE_FAIL dating $error ${photos[i]}');
+                    return const ColoredBox(
+                      color: AppColors.surfaceElevated,
+                      child: Center(
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: AppColors.textTertiary,
+                          size: 40,
+                        ),
+                      ),
+                    );
+                  },
                 );
-              },
-              errorBuilder: (context, error, stackTrace) => const ColoredBox(
-                color: AppColors.surfaceElevated,
-                child: Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: AppColors.textTertiary,
-                    size: 40,
+                },
+              ),
+              if (photos.length > 1)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 12,
+                  child: IgnorePointer(
+                    child: Row(
+                      children: List.generate(photos.length, (i) {
+                        final active = i == _index;
+                        return Expanded(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            margin: EdgeInsets.only(
+                              right: i == photos.length - 1 ? 0 : 4,
+                            ),
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? AppColors.accent
+                                  : Colors.white.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
-        if (photos.length > 1)
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: Row(
-              children: List.generate(photos.length, (i) {
-                final active = i == _index;
-                return Expanded(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin: EdgeInsets.only(
-                      right: i == photos.length - 1 ? 0 : 4,
-                    ),
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: active
-                          ? AppColors.accent
-                          : Colors.white.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-        if (photos.length > 1)
-          Positioned(
-            bottom: 72,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(photos.length, (i) {
-                final active = i == _index;
-                return Container(
-                  width: active ? 7 : 6,
-                  height: active ? 7 : 6,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: active
-                        ? AppColors.accent
-                        : Colors.white.withValues(alpha: 0.4),
-                    border: Border.all(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      width: 0.5,
+              if (photos.length > 1)
+                Positioned(
+                  bottom: 72,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(photos.length, (i) {
+                        final active = i == _index;
+                        return Container(
+                          width: active ? 7 : 6,
+                          height: active ? 7 : 6,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: active
+                                ? AppColors.accent
+                                : Colors.white.withValues(alpha: 0.4),
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              width: 0.5,
+                            ),
+                          ),
+                        );
+                      }),
                     ),
                   ),
-                );
-              }),
-            ),
+                ),
+            ],
           ),
-      ],
+        );
+      },
     );
   }
 }
@@ -186,11 +229,7 @@ class DatingProfileCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            GestureDetector(
-              onTap: onOpenProfile,
-              behavior: HitTestBehavior.opaque,
-              child: DatingPhotoViewer(photos: photos),
-            ),
+            DatingPhotoViewer(photos: photos),
             const IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -218,18 +257,18 @@ class DatingProfileCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                  Text(
-                    candidate.age != null
-                        ? '${candidate.nickname}, ${candidate.age}'
-                        : candidate.nickname,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.2,
-                        ),
-                  ),
+                    Text(
+                      candidate.age != null
+                          ? '${candidate.nickname}, ${candidate.age}'
+                          : candidate.nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                          ),
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       children: [

@@ -65,6 +65,7 @@ class ProfileRepository {
     String? bio,
     bool clearBio = false,
     String? gameRole,
+    bool clearGameRole = false,
     String? teamName,
   }) async {
     final payload = <String, dynamic>{};
@@ -80,7 +81,11 @@ class ProfileRepository {
     } else if (bio != null) {
       payload['bio'] = bio;
     }
-    if (gameRole != null) payload['game_role'] = gameRole;
+    if (clearGameRole) {
+      payload['game_role'] = null;
+    } else if (gameRole != null) {
+      payload['game_role'] = gameRole;
+    }
     if (teamName != null) payload['team_name'] = teamName;
 
     final row = await _client
@@ -103,6 +108,7 @@ class ProfileRepository {
       bio: profile.bio,
       clearBio: profile.bio == null,
       gameRole: profile.gameRole,
+      clearGameRole: profile.gameRole == null,
       teamName: profile.teamName,
     );
   }

@@ -6,13 +6,32 @@ import 'app_exception.dart';
 
 /// Maps low-level errors to user-facing Russian messages.
 abstract final class ErrorMapper {
-  static String map(Object error) {
-    if (error is AppException) return error.message;
+  static bool isNetwork(Object error) {
+    if (error is SocketException) return true;
+    if (error is AuthRetryableFetchException) return true;
+    final text = error.toString().toLowerCase();
+    return text.contains('socketexception') ||
+        text.contains('failed host lookup') ||
+        text.contains('network is unreachable') ||
+        text.contains('connection refused') ||
+        text.contains('connection reset') ||
+        text.contains('clientexception') ||
+        text.contains('network') ||
+        text.contains('connection') ||
+        text.contains('timed out') ||
+        text.contains('timeout') ||
+        text.contains('нет подключения');
+  }
 
-    if (error is SocketException ||
-        error.toString().contains('SocketException') ||
-        error.toString().contains('Failed host lookup') ||
-        error.toString().contains('Network is unreachable')) {
+  static String map(Object error) {
+    if (error is AppException) {
+      if (isNetwork(error.message)) {
+        return 'Нет подключения к интернету. Проверьте сеть и попробуйте снова.';
+      }
+      return error.message;
+    }
+
+    if (isNetwork(error)) {
       return 'Нет подключения к интернету. Проверьте сеть и попробуйте снова.';
     }
 
@@ -22,18 +41,6 @@ abstract final class ErrorMapper {
 
     if (error is PostgrestException) {
       return _postgrest(error);
-    }
-
-    if (error is AuthRetryableFetchException) {
-      return 'Нет подключения к интернету. Проверьте сеть и попробуйте снова.';
-    }
-
-    final message = error.toString().toLowerCase();
-    if (message.contains('network') ||
-        message.contains('connection') ||
-        message.contains('timed out') ||
-        message.contains('timeout')) {
-      return 'Нет подключения к интернету. Проверьте сеть и попробуйте снова.';
     }
 
     return 'Что-то пошло не так. Попробуйте позже.';

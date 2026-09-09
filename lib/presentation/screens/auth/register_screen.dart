@@ -20,7 +20,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phone = TextEditingController();
+  final _phone = TextEditingController(text: '+7');
   final _nickname = TextEditingController();
   final _city = TextEditingController();
   final _password = TextEditingController();
@@ -31,6 +31,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _checkingNick = false;
   String? _nicknameRemoteError;
   String? _formError;
+
+  @override
+  void initState() {
+    super.initState();
+    _phone.selection = TextSelection.collapsed(offset: _phone.text.length);
+  }
 
   @override
   void dispose() {

@@ -103,6 +103,9 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
     if (uidAfter != uid) return const [];
 
     final list = await repo.fetchConversations(type: arg);
+    final visible = arg == ConversationType.clan
+        ? await _visibleClanConversations(list)
+        : list;
 
     final uidFinal = ref.read(supabaseClientProvider).auth.currentUser?.id;
     if (uidFinal != uid) return const [];
@@ -113,6 +116,7 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
       _tearDownInboxChannel();
       _boundUserId = uid;
       _channel = repo.subscribeConversationsInbox(
+        channelKey: arg.name,
         onChange: () {
           final liveUid =
               ref.read(supabaseClientProvider).auth.currentUser?.id;
@@ -128,7 +132,7 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
       );
     }
 
-    return list;
+    return visible;
   }
 
   void _tearDownInboxChannel() {
@@ -154,9 +158,7 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
       for (final clanId in clanIds) {
         await repo.openClanChat(clanId);
         final role = await ref.read(myClanRoleProvider(clanId).future);
-        if (role == ClanRole.leader ||
-            role == ClanRole.officer ||
-            role == ClanRole.trainer) {
+        if (role?.isLeadership == true) {
           try {
             await repo.openClanOfficersChat(clanId);
           } catch (_) {}
@@ -173,8 +175,11 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
     }
     if (!silent) state = const AsyncLoading();
     try {
-      final list =
+      var list =
           await ref.read(chatRepositoryProvider).fetchConversations(type: arg);
+      if (arg == ConversationType.clan) {
+        list = await _visibleClanConversations(list);
+      }
       final live = ref.read(supabaseClientProvider).auth.currentUser?.id;
       if (live != uid) return;
       state = AsyncData(list);
@@ -185,6 +190,24 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
     }
     unawaited(ref.read(folderUnreadProvider.notifier).refresh(silent: true));
   }
+
+  /// Hide clan chats the user is not allowed to see (stale membership).
+  Future<List<ConversationPreview>> _visibleClanConversations(
+    List<ConversationPreview> list,
+  ) async {
+    final out = <ConversationPreview>[];
+    for (final c in list) {
+      final clanId = c.clanId;
+      if (clanId == null) continue;
+      final role = await ref.read(myClanRoleProvider(clanId).future);
+      if (role == null) continue;
+      if (c.clanChannel == ClanChatChannel.officers && !role.isLeadership) {
+        continue;
+      }
+      out.add(c);
+    }
+    return out;
+  }
 }
 
 /// Alias used by chat message notifier refresh.
@@ -194,6 +217,12 @@ final conversationDetailProvider = AsyncNotifierProvider.family<
     ConversationDetailNotifier, ConversationDetail, String>(
   ConversationDetailNotifier.new,
 );
+
+final conversationParticipantsProvider = FutureProvider.autoDispose
+    .family<List<ConversationParticipant>, String>((ref, conversationId) {
+  ref.watch(authStateProvider);
+  return ref.read(chatRepositoryProvider).fetchParticipants(conversationId);
+});
 
 final chatMuteProvider =
     FutureProvider.autoDispose.family<ChatMuteInfo?, String>((ref, conversationId) {
@@ -376,6 +405,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     if (uid == null) return false;
 
     final me = _ref.read(currentProfileProvider).valueOrNull;
+    final myClanRole = _myClanRoleInChat();
     final tempId = 'local-${DateTime.now().microsecondsSinceEpoch}';
     final optimistic = ChatMessage(
       id: tempId,
@@ -386,6 +416,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       pending: true,
       senderNickname: me?.nickname,
       senderAvatarUrl: me?.avatarUrl,
+      senderClanRole: myClanRole,
     );
 
     state = state.copyWith(
@@ -399,10 +430,13 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
             conversationId: conversationId,
             text: trimmed,
           );
-      saved = saved.copyWith(
-        senderNickname: saved.senderNickname ?? me?.nickname,
-        senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
-      );
+      saved = await _ref.read(chatRepositoryProvider).enrichSender(
+            saved.copyWith(
+              senderNickname: saved.senderNickname ?? me?.nickname,
+              senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
+              senderClanRole: saved.senderClanRole ?? myClanRole,
+            ),
+          );
       if (!mounted) return true;
       _replaceOptimistic(tempId, saved);
       return true;
@@ -431,6 +465,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     if (bytes.isEmpty || durationMs < 500) return false;
 
     final me = _ref.read(currentProfileProvider).valueOrNull;
+    final myClanRole = _myClanRoleInChat();
     final tempId = 'local-voice-${DateTime.now().microsecondsSinceEpoch}';
     final optimistic = ChatMessage(
       id: tempId,
@@ -443,6 +478,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       audioDurationMs: durationMs,
       senderNickname: me?.nickname,
       senderAvatarUrl: me?.avatarUrl,
+      senderClanRole: myClanRole,
     );
 
     state = state.copyWith(
@@ -464,10 +500,13 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
             audioUrl: url,
             durationMs: durationMs,
           );
-      saved = saved.copyWith(
-        senderNickname: saved.senderNickname ?? me?.nickname,
-        senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
-      );
+      saved = await _ref.read(chatRepositoryProvider).enrichSender(
+            saved.copyWith(
+              senderNickname: saved.senderNickname ?? me?.nickname,
+              senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
+              senderClanRole: saved.senderClanRole ?? myClanRole,
+            ),
+          );
       if (!mounted) return true;
       _replaceOptimistic(tempId, saved);
       return true;
@@ -491,6 +530,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     if (bytes.isEmpty) return false;
 
     final me = _ref.read(currentProfileProvider).valueOrNull;
+    final myClanRole = _myClanRoleInChat();
     final tempId = 'local-image-${DateTime.now().microsecondsSinceEpoch}';
     final optimistic = ChatMessage(
       id: tempId,
@@ -502,6 +542,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       messageType: ChatMessageType.image,
       senderNickname: me?.nickname,
       senderAvatarUrl: me?.avatarUrl,
+      senderClanRole: myClanRole,
     );
 
     state = state.copyWith(
@@ -520,10 +561,13 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
             conversationId: conversationId,
             imageUrl: url,
           );
-      saved = saved.copyWith(
-        senderNickname: saved.senderNickname ?? me?.nickname,
-        senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
-      );
+      saved = await _ref.read(chatRepositoryProvider).enrichSender(
+            saved.copyWith(
+              senderNickname: saved.senderNickname ?? me?.nickname,
+              senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
+              senderClanRole: saved.senderClanRole ?? myClanRole,
+            ),
+          );
       if (!mounted) return true;
       _replaceOptimistic(tempId, saved);
       return true;
@@ -539,6 +583,17 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       );
       return false;
     }
+  }
+
+  ClanRole? _myClanRoleInChat() {
+    final detail =
+        _ref.read(conversationDetailProvider(conversationId)).valueOrNull;
+    if (detail == null ||
+        detail.type != ConversationType.clan ||
+        detail.clanId == null) {
+      return null;
+    }
+    return _ref.read(myClanRoleProvider(detail.clanId!)).valueOrNull;
   }
 
   void _replaceOptimistic(String tempId, ChatMessage saved) {

@@ -2,6 +2,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/app_exception.dart';
 import '../../core/utils/error_mapper.dart';
+import '../../core/utils/perf_log.dart';
+import '../../domain/models/clan.dart';
 import '../../domain/models/conversation.dart';
 
 class ChatRepository {
@@ -51,141 +53,22 @@ class ChatRepository {
           .order('updated_at', ascending: false)
           .timeout(const Duration(seconds: 15));
 
-      final previews = <ConversationPreview>[];
-      for (final raw in convRows as List) {
-        final c = Map<String, dynamic>.from(raw as Map);
-        final id = c['id'] as String;
+      final convList = (convRows as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
 
-        String? lastText;
-        DateTime? lastAt;
-        try {
-          final last = await _client
-              .from('messages')
-              .select('text, created_at, deleted_at, message_type')
-              .eq('conversation_id', id)
-              .order('created_at', ascending: false)
-              .limit(1)
-              .maybeSingle()
-              .timeout(const Duration(seconds: 8));
-          if (last != null) {
-            lastAt = DateTime.parse(last['created_at'] as String);
-            if (last['deleted_at'] != null) {
-              lastText = 'Сообщение удалено';
-            } else if ((last['message_type'] as String?) == 'voice') {
-              lastText = 'Голосовое сообщение';
-            } else if ((last['message_type'] as String?) == 'image') {
-              lastText = 'Фото';
-            } else {
-              lastText = last['text'] as String?;
-            }
-          }
-        } catch (_) {}
-
-        var unread = 0;
-        try {
-          final readAt = lastRead[id];
-          var q = _client
-              .from('messages')
-              .select('id')
-              .eq('conversation_id', id)
-              .neq('sender_id', uid);
-          if (readAt != null) {
-            q = q.gt('created_at', readAt.toUtc().toIso8601String());
-          }
-          final unreadRows = await q.timeout(const Duration(seconds: 8));
-          unread = (unreadRows as List).length;
-        } catch (_) {}
-
-        String? peerId;
-        String? peerNick;
-        String? peerAvatar;
-        DateTime? peerLastSeen;
-        String? listingTitle;
-        double? listingPrice;
-        String? listingCover;
-
-        final convType = ConversationType.fromString(c['type'] as String);
-        if (convType == ConversationType.user ||
-            convType == ConversationType.market ||
-            convType == ConversationType.dating) {
-          try {
-            final peers = await _client
-                .from('conversation_members')
-                .select('user_id')
-                .eq('conversation_id', id)
-                .neq('user_id', uid)
-                .limit(1)
-                .timeout(const Duration(seconds: 8));
-            if ((peers as List).isNotEmpty) {
-              peerId = (peers.first as Map)['user_id'] as String;
-              final profile = await _client
-                  .from('profiles')
-                  .select('nickname, avatar_url, last_seen_at')
-                  .eq('id', peerId)
-                  .maybeSingle()
-                  .timeout(const Duration(seconds: 8));
-              peerNick = profile?['nickname'] as String?;
-              peerAvatar = profile?['avatar_url'] as String?;
-              final seen = profile?['last_seen_at'] as String?;
-              if (seen != null) peerLastSeen = DateTime.parse(seen);
-            }
-          } catch (_) {}
-        }
-
-        final listingId = c['listing_id'] as String?;
-        if (listingId != null) {
-          try {
-            final listing = await _client
-                .from('listings')
-                .select('title, price')
-                .eq('id', listingId)
-                .maybeSingle()
-                .timeout(const Duration(seconds: 8));
-            if (listing != null) {
-              listingTitle = listing['title'] as String?;
-              listingPrice = (listing['price'] as num?)?.toDouble();
-            }
-            final img = await _client
-                .from('listing_images')
-                .select('url')
-                .eq('listing_id', listingId)
-                .order('sort_order', ascending: true)
-                .limit(1)
-                .maybeSingle()
-                .timeout(const Duration(seconds: 8));
-            listingCover = img?['url'] as String?;
-          } catch (_) {}
-        }
-
-        final channel = ClanChatChannel.fromString(c['clan_channel'] as String?);
-        if (convType == ConversationType.clan ||
-            convType == ConversationType.city) {
-          peerNick = c['title'] as String?;
-        }
-
-        previews.add(
-          ConversationPreview(
-            id: id,
-            type: convType,
-            title: c['title'] as String?,
-            listingId: listingId,
-            clanId: c['clan_id'] as String?,
-            clanChannel: channel,
-            createdAt: DateTime.parse(c['created_at'] as String),
-            updatedAt: DateTime.parse(c['updated_at'] as String),
-            lastMessageText: lastText,
-            lastMessageAt: lastAt,
-            unreadCount: unread,
-            peerUserId: peerId,
-            peerNickname: peerNick,
-            peerAvatarUrl: peerAvatar,
-            peerLastSeenAt: peerLastSeen,
-            listingTitle: listingTitle,
-            listingPrice: listingPrice,
-            listingCoverUrl: listingCover,
+      final previews = await PerfLog.time(
+        'inbox previews type=${type.name} n=${convList.length}',
+        () => Future.wait(
+          convList.map(
+            (c) => _buildConversationPreview(
+              c: c,
+              uid: uid,
+              lastRead: lastRead[c['id'] as String],
+            ),
           ),
-        );
-      }
+        ),
+      );
 
       if (type == ConversationType.clan) {
         previews.sort((a, b) {
@@ -208,6 +91,184 @@ class ChatRepository {
       if (e is AppException) rethrow;
       throw AppException(ErrorMapper.map(e));
     }
+  }
+
+  Future<ConversationPreview> _buildConversationPreview({
+    required Map<String, dynamic> c,
+    required String uid,
+    required DateTime? lastRead,
+  }) async {
+    final id = c['id'] as String;
+    final convType = ConversationType.fromString(c['type'] as String);
+
+    final lastFut = () async {
+      try {
+        final last = await _client
+            .from('messages')
+            .select('text, created_at, deleted_at, message_type')
+            .eq('conversation_id', id)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 8));
+        if (last == null) return (text: null as String?, at: null as DateTime?);
+        final lastAt = DateTime.parse(last['created_at'] as String);
+        late final String? lastText;
+        if (last['deleted_at'] != null) {
+          lastText = 'Сообщение удалено';
+        } else if ((last['message_type'] as String?) == 'voice') {
+          lastText = 'Голосовое сообщение';
+        } else if ((last['message_type'] as String?) == 'image') {
+          lastText = 'Фото';
+        } else {
+          lastText = last['text'] as String?;
+        }
+        return (text: lastText, at: lastAt);
+      } catch (_) {
+        return (text: null as String?, at: null as DateTime?);
+      }
+    }();
+
+    final unreadFut = () async {
+      try {
+        var q = _client
+            .from('messages')
+            .select('id')
+            .eq('conversation_id', id)
+            .neq('sender_id', uid);
+        if (lastRead != null) {
+          q = q.gt('created_at', lastRead.toUtc().toIso8601String());
+        }
+        final unreadRows = await q.timeout(const Duration(seconds: 8));
+        return (unreadRows as List).length;
+      } catch (_) {
+        return 0;
+      }
+    }();
+
+    final peerFut = () async {
+      if (convType != ConversationType.user &&
+          convType != ConversationType.market &&
+          convType != ConversationType.dating) {
+        return (
+          id: null as String?,
+          nick: null as String?,
+          avatar: null as String?,
+          seen: null as DateTime?,
+        );
+      }
+      try {
+        final peers = await _client
+            .from('conversation_members')
+            .select('user_id')
+            .eq('conversation_id', id)
+            .neq('user_id', uid)
+            .limit(1)
+            .timeout(const Duration(seconds: 8));
+        if ((peers as List).isEmpty) {
+          return (
+            id: null as String?,
+            nick: null as String?,
+            avatar: null as String?,
+            seen: null as DateTime?,
+          );
+        }
+        final peerId = (peers.first as Map)['user_id'] as String;
+        final profile = await _client
+            .from('profiles')
+            .select('nickname, avatar_url, last_seen_at')
+            .eq('id', peerId)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 8));
+        DateTime? peerLastSeen;
+        final seen = profile?['last_seen_at'] as String?;
+        if (seen != null) peerLastSeen = DateTime.parse(seen);
+        return (
+          id: peerId,
+          nick: profile?['nickname'] as String?,
+          avatar: profile?['avatar_url'] as String?,
+          seen: peerLastSeen,
+        );
+      } catch (_) {
+        return (
+          id: null as String?,
+          nick: null as String?,
+          avatar: null as String?,
+          seen: null as DateTime?,
+        );
+      }
+    }();
+
+    final listingId = c['listing_id'] as String?;
+    final listingFut = () async {
+      if (listingId == null) {
+        return (
+          title: null as String?,
+          price: null as double?,
+          cover: null as String?,
+        );
+      }
+      try {
+        final listing = await _client
+            .from('listings')
+            .select('title, price')
+            .eq('id', listingId)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 8));
+        final img = await _client
+            .from('listing_images')
+            .select('url')
+            .eq('listing_id', listingId)
+            .order('sort_order', ascending: true)
+            .limit(1)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 8));
+        return (
+          title: listing?['title'] as String?,
+          price: (listing?['price'] as num?)?.toDouble(),
+          cover: img?['url'] as String?,
+        );
+      } catch (_) {
+        return (
+          title: null as String?,
+          price: null as double?,
+          cover: null as String?,
+        );
+      }
+    }();
+
+    final last = await lastFut;
+    final unread = await unreadFut;
+    final peer = await peerFut;
+    final listing = await listingFut;
+
+    final channel = ClanChatChannel.fromString(c['clan_channel'] as String?);
+    var peerNick = peer.nick;
+    if (convType == ConversationType.clan ||
+        convType == ConversationType.city) {
+      peerNick = c['title'] as String?;
+    }
+
+    return ConversationPreview(
+      id: id,
+      type: convType,
+      title: c['title'] as String?,
+      listingId: listingId,
+      clanId: c['clan_id'] as String?,
+      clanChannel: channel,
+      createdAt: DateTime.parse(c['created_at'] as String),
+      updatedAt: DateTime.parse(c['updated_at'] as String),
+      lastMessageText: last.text,
+      lastMessageAt: last.at,
+      unreadCount: unread,
+      peerUserId: peer.id,
+      peerNickname: peerNick,
+      peerAvatarUrl: peer.avatar,
+      peerLastSeenAt: peer.seen,
+      listingTitle: listing.title,
+      listingPrice: listing.price,
+      listingCoverUrl: listing.cover,
+    );
   }
 
   Future<ConversationDetail> fetchConversation(String id) async {
@@ -339,6 +400,7 @@ class ChatRepository {
           .toList();
 
       list = await _enrichSenders(list);
+      list = await _enrichClanRoles(conversationId, list);
       return list;
     } catch (e) {
       // Fallback without embed if FK hint fails
@@ -357,14 +419,15 @@ class ChatRepository {
             .order('created_at', ascending: false)
             .limit(_pageSize)
             .timeout(const Duration(seconds: 15));
-        final list = (rows as List)
+        var list = (rows as List)
             .map(
               (e) => ChatMessage.fromJson(Map<String, dynamic>.from(e as Map)),
             )
             .toList()
             .reversed
             .toList();
-        return _enrichSenders(list);
+        list = await _enrichSenders(list);
+        return _enrichClanRoles(conversationId, list);
       } catch (e2) {
         throw AppException(ErrorMapper.map(e2));
       }
@@ -372,13 +435,19 @@ class ChatRepository {
   }
 
   Future<ChatMessage> enrichSender(ChatMessage message) async {
-    if (message.senderNickname != null &&
-        message.senderNickname!.isNotEmpty &&
-        message.senderAvatarUrl != null) {
-      return message;
+    var enriched = message;
+    if (message.senderNickname == null ||
+        message.senderNickname!.isEmpty ||
+        message.senderAvatarUrl == null) {
+      final list = await _enrichSenders([message]);
+      enriched = list.isEmpty ? message : list.first;
     }
-    final enriched = await _enrichSenders([message]);
-    return enriched.isEmpty ? message : enriched.first;
+    if (enriched.senderClanRole == null) {
+      final withRoles =
+          await _enrichClanRoles(message.conversationId, [enriched]);
+      enriched = withRoles.isEmpty ? enriched : withRoles.first;
+    }
+    return enriched;
   }
 
   Future<List<ChatMessage>> _enrichSenders(List<ChatMessage> messages) async {
@@ -415,6 +484,53 @@ class ChatRepository {
             )
           else
             m,
+      ];
+    } catch (_) {
+      return messages;
+    }
+  }
+
+  Future<List<ChatMessage>> _enrichClanRoles(
+    String conversationId,
+    List<ChatMessage> messages,
+  ) async {
+    if (messages.isEmpty) return messages;
+    final need = messages.where((m) => m.senderClanRole == null).toList();
+    if (need.isEmpty) return messages;
+
+    try {
+      final conv = await _client
+          .from('conversations')
+          .select('type, clan_id')
+          .eq('id', conversationId)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 8));
+      if (conv == null) return messages;
+      if ((conv['type'] as String?) != 'clan') return messages;
+      final clanId = conv['clan_id'] as String?;
+      if (clanId == null) return messages;
+
+      final userIds = need.map((m) => m.senderId).toSet().toList();
+      final rows = await _client
+          .from('clan_members')
+          .select('user_id, role')
+          .eq('clan_id', clanId)
+          .inFilter('user_id', userIds)
+          .timeout(const Duration(seconds: 10));
+
+      final roleById = <String, ClanRole>{};
+      for (final raw in rows as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        roleById[map['user_id'] as String] =
+            ClanRole.fromString(map['role'] as String? ?? 'member');
+      }
+      if (roleById.isEmpty) return messages;
+
+      return [
+        for (final m in messages)
+          roleById.containsKey(m.senderId)
+              ? m.copyWith(senderClanRole: roleById[m.senderId])
+              : m,
       ];
     } catch (_) {
       return messages;
@@ -485,6 +601,90 @@ class ChatRepository {
       return result as String;
     } catch (e) {
       throw AppException(_mapChatError(e));
+    }
+  }
+
+  Future<List<ConversationParticipant>> fetchParticipants(
+    String conversationId,
+  ) async {
+    try {
+      final uid = _uid;
+      if (uid == null) throw const AppException('Требуется авторизация');
+
+      final conv = await _client
+          .from('conversations')
+          .select('id, type, clan_id')
+          .eq('id', conversationId)
+          .single()
+          .timeout(const Duration(seconds: 12));
+
+      final type = ConversationType.fromString(conv['type'] as String);
+      final clanId = conv['clan_id'] as String?;
+
+      final memberRows = await _client
+          .from('conversation_members')
+          .select('user_id')
+          .eq('conversation_id', conversationId)
+          .timeout(const Duration(seconds: 12));
+
+      final userIds = (memberRows as List)
+          .map((r) => (r as Map)['user_id'] as String)
+          .toList();
+      if (userIds.isEmpty) return const [];
+
+      final profiles = await _client
+          .from('profiles')
+          .select('id, nickname, avatar_url')
+          .inFilter('id', userIds)
+          .timeout(const Duration(seconds: 12));
+
+      final nickById = <String, String>{};
+      final avatarById = <String, String?>{};
+      for (final raw in profiles as List) {
+        final m = Map<String, dynamic>.from(raw as Map);
+        final id = m['id'] as String;
+        nickById[id] = (m['nickname'] as String?)?.trim().isNotEmpty == true
+            ? m['nickname'] as String
+            : 'Боец';
+        avatarById[id] = m['avatar_url'] as String?;
+      }
+
+      final roleById = <String, ClanRole>{};
+      if (type == ConversationType.clan && clanId != null) {
+        final roles = await _client
+            .from('clan_members')
+            .select('user_id, role')
+            .eq('clan_id', clanId)
+            .inFilter('user_id', userIds)
+            .timeout(const Duration(seconds: 12));
+        for (final raw in roles as List) {
+          final m = Map<String, dynamic>.from(raw as Map);
+          roleById[m['user_id'] as String] =
+              ClanRole.fromString(m['role'] as String? ?? 'member');
+        }
+      }
+
+      final participants = userIds
+          .map(
+            (id) => ConversationParticipant(
+              userId: id,
+              nickname: nickById[id] ?? 'Боец',
+              avatarUrl: avatarById[id],
+              clanRole: roleById[id],
+            ),
+          )
+          .toList();
+
+      participants.sort((a, b) {
+        final aRank = a.clanRole?.index ?? 99;
+        final bRank = b.clanRole?.index ?? 99;
+        if (aRank != bRank) return aRank.compareTo(bRank);
+        return a.nickname.toLowerCase().compareTo(b.nickname.toLowerCase());
+      });
+      return participants;
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw AppException(ErrorMapper.map(e));
     }
   }
 
@@ -644,8 +844,9 @@ class ChatRepository {
 
   RealtimeChannel subscribeConversationsInbox({
     required void Function() onChange,
+    String channelKey = 'all',
   }) {
-    final channel = _client.channel('inbox-updates');
+    final channel = _client.channel('inbox-updates-$channelKey');
     channel
         .onPostgresChanges(
           event: PostgresChangeEvent.all,

@@ -8,6 +8,7 @@ import 'dating_providers.dart';
 import 'market_providers.dart';
 import 'organizer_events_providers.dart';
 import 'organizer_wallet_providers.dart';
+import 'offline_qr_providers.dart';
 import 'polygon_providers.dart';
 import 'profile_providers.dart';
 import 'progression_providers.dart';
@@ -37,6 +38,8 @@ void resetUserScopedProviders(Ref ref) {
   ref.invalidate(organizerDashboardProvider);
   ref.invalidate(organizerWithdrawalsProvider);
   ref.invalidate(myOrganizerEventsProvider);
+  ref.invalidate(offlineQrStoreProvider);
+  ref.read(pendingAttendanceTickProvider.notifier).state = 0;
 
   ref.read(previousLevelProvider.notifier).state = null;
   ref.read(progressionFeedbackProvider.notifier).state = null;

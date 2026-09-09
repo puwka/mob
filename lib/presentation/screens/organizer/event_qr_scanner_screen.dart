@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../data/repositories/event_repository.dart';
 import '../../../domain/models/event.dart';
+import '../../../presentation/providers/offline_qr_providers.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
 import '../../../presentation/providers/organizer_wallet_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
@@ -31,13 +32,55 @@ class _EventQrScannerScreenState extends ConsumerState<EventQrScannerScreen> {
   );
 
   var _busy = false;
+  var _rosterReady = false;
+  var _rosterFromCache = false;
+  var _hasRoster = false;
   String? _error;
+  String? _eventTitle;
   AttendanceConfirmResult? _success;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _prepare() async {
+    final events = ref.read(myOrganizerEventsProvider).valueOrNull;
+    final fromList = events?.where((e) => e.id == widget.eventId).firstOrNull;
+    final title = fromList?.title;
+
+    final service = ref.read(offlineAttendanceServiceProvider);
+    if (service == null) {
+      if (mounted) {
+        setState(() {
+          _rosterReady = true;
+          _eventTitle = title;
+        });
+      }
+      return;
+    }
+
+    await service.syncPending();
+    final fetched = await service.prefetchRoster(
+      eventId: widget.eventId,
+      eventTitle: title ?? 'Мероприятие',
+    );
+    final cached = fetched.roster ?? service.cachedRoster(widget.eventId);
+    if (!mounted) return;
+    setState(() {
+      _rosterReady = true;
+      _rosterFromCache = !fetched.fromNetwork;
+      _hasRoster = cached != null && cached.participants.isNotEmpty;
+      _eventTitle = cached?.eventTitle ?? title;
+    });
+    bumpPendingAttendanceTick(ref);
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
@@ -61,15 +104,26 @@ class _EventQrScannerScreenState extends ConsumerState<EventQrScannerScreen> {
     await _controller.stop();
 
     try {
-      final result = await ref.read(eventRepositoryProvider).confirmAttendance(
-            eventId: widget.eventId,
-            publicQrId: token,
-          );
+      final service = ref.read(offlineAttendanceServiceProvider);
+      final AttendanceConfirmResult result;
+      if (service != null) {
+        result = await service.confirm(
+          eventId: widget.eventId,
+          publicQrId: token,
+          eventTitleHint: _eventTitle,
+        );
+      } else {
+        result = await ref.read(eventRepositoryProvider).confirmAttendance(
+              eventId: widget.eventId,
+              publicQrId: token,
+            );
+      }
       ref.invalidate(eventParticipantsProvider(widget.eventId));
       ref.invalidate(myOrganizerEventsProvider);
       ref.invalidate(organizerWalletProvider);
       ref.invalidate(organizerTransactionsProvider);
       ref.invalidate(organizerDashboardProvider);
+      bumpPendingAttendanceTick(ref);
       if (!mounted) return;
       setState(() {
         _success = result;
@@ -102,6 +156,8 @@ class _EventQrScannerScreenState extends ConsumerState<EventQrScannerScreen> {
         onScanAgain: _scanAgain,
       );
     }
+
+    final pending = ref.watch(pendingAttendanceCountProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -141,14 +197,31 @@ class _EventQrScannerScreenState extends ConsumerState<EventQrScannerScreen> {
             ),
             child: Column(
               children: [
-                const Text(
-                  'Наведите камеру на QR-код участника',
+                Text(
+                  !_rosterReady
+                      ? 'Подготовка списка участников…'
+                      : (!_hasRoster
+                          ? 'Нет списка участников. Нужен интернет один раз перед полигоном.'
+                          : (_rosterFromCache
+                              ? 'Офлайн-режим: список участников из кэша'
+                              : 'Наведите камеру на QR-код участника')),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13.5,
                   ),
                 ),
+                if (pending > 0) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Ожидает синхронизации: $pending',
+                    style: const TextStyle(
+                      color: AppColors.accent,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
                 if (_error != null) ...[
                   const SizedBox(height: 10),
                   AppCard(
@@ -197,6 +270,7 @@ class _SuccessView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = DateFormat('HH:mm', 'ru').format(result.attendedAt.toLocal());
+    final pending = result.pendingSync;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -217,21 +291,35 @@ class _SuccessView extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.accentDim),
                   ),
-                  child: const Icon(
-                    Icons.check_rounded,
+                  child: Icon(
+                    pending ? Icons.cloud_off_outlined : Icons.check_rounded,
                     color: AppColors.accent,
                     size: 32,
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Участие подтверждено',
-                  style: TextStyle(
+                Text(
+                  pending
+                      ? 'Сохранено офлайн'
+                      : 'Участие подтверждено',
+                  style: const TextStyle(
                     color: AppColors.accent,
                     fontWeight: FontWeight.w800,
                     fontSize: 17,
                   ),
                 ),
+                if (pending) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Начисление CR синхронизируется при появлении интернета',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
                   result.nickname,
@@ -254,36 +342,38 @@ class _SuccessView extends StatelessWidget {
                 _Line(label: 'Мероприятие', value: result.eventTitle),
                 const SizedBox(height: 8),
                 _Line(label: 'Время', value: time),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentSoft,
-                    borderRadius: BorderRadius.circular(AppRadii.badge),
-                    border: Border.all(color: AppColors.accentDim),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Начислено ${result.rewardLabel}',
-                        style: const TextStyle(
-                          color: AppColors.accent,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
+                if (!pending) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentSoft,
+                      borderRadius: BorderRadius.circular(AppRadii.badge),
+                      border: Border.all(color: AppColors.accentDim),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Начислено ${result.rewardLabel}',
+                          style: const TextStyle(
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Баланс: ${result.balanceLabel}',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12.5,
+                        const SizedBox(height: 4),
+                        Text(
+                          'Баланс: ${result.balanceLabel}',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12.5,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -366,7 +456,6 @@ class _ScanFramePainter extends CustomPainter {
       ..strokeCap = StrokeCap.square
       ..style = PaintingStyle.stroke;
     const len = 22.0;
-    // corners
     canvas.drawLine(Offset(left, top + len), Offset(left, top), corner);
     canvas.drawLine(Offset(left, top), Offset(left + len, top), corner);
     canvas.drawLine(

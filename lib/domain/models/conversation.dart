@@ -1,3 +1,5 @@
+import 'clan.dart';
+
 enum ConversationType {
   market,
   dating,
@@ -79,6 +81,7 @@ class ChatMessage {
     this.imageUrl,
     this.senderNickname,
     this.senderAvatarUrl,
+    this.senderClanRole,
     this.pending = false,
     this.failed = false,
   });
@@ -96,6 +99,7 @@ class ChatMessage {
   final String? imageUrl;
   final String? senderNickname;
   final String? senderAvatarUrl;
+  final ClanRole? senderClanRole;
   final bool pending;
   final bool failed;
 
@@ -122,6 +126,8 @@ class ChatMessage {
     String? id,
     String? senderNickname,
     String? senderAvatarUrl,
+    ClanRole? senderClanRole,
+    bool clearSenderClanRole = false,
     String? audioUrl,
     int? audioDurationMs,
     String? imageUrl,
@@ -142,6 +148,9 @@ class ChatMessage {
       imageUrl: imageUrl ?? this.imageUrl,
       senderNickname: senderNickname ?? this.senderNickname,
       senderAvatarUrl: senderAvatarUrl ?? this.senderAvatarUrl,
+      senderClanRole: clearSenderClanRole
+          ? null
+          : (senderClanRole ?? this.senderClanRole),
       pending: pending ?? this.pending,
       failed: failed ?? this.failed,
     );
@@ -157,6 +166,12 @@ class ChatMessage {
     }
     nick ??= json['sender_nickname'] as String?;
     avatar ??= json['sender_avatar_url'] as String?;
+
+    ClanRole? clanRole;
+    final roleRaw = json['sender_clan_role'] as String?;
+    if (roleRaw != null && roleRaw.isNotEmpty) {
+      clanRole = ClanRole.fromString(roleRaw);
+    }
 
     return ChatMessage(
       id: json['id'] as String,
@@ -178,6 +193,7 @@ class ChatMessage {
       imageUrl: json['image_url'] as String?,
       senderNickname: nick,
       senderAvatarUrl: avatar,
+      senderClanRole: clanRole,
     );
   }
 }
@@ -339,4 +355,20 @@ class ConversationDetail {
     }
     return peerNickname ?? title ?? 'Диалог';
   }
+}
+
+class ConversationParticipant {
+  const ConversationParticipant({
+    required this.userId,
+    required this.nickname,
+    this.avatarUrl,
+    this.clanRole,
+  });
+
+  final String userId;
+  final String nickname;
+  final String? avatarUrl;
+  final ClanRole? clanRole;
+
+  String? get roleLabel => clanRole?.labelRu;
 }

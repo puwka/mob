@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/profile_repository.dart';
 import '../../domain/models/profile.dart';
+import '../../services/offline_qr_store.dart';
 import 'session_reset.dart';
 
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
@@ -49,11 +50,25 @@ class CurrentProfileNotifier extends AsyncNotifier<Profile?> {
     if (user == null) return null;
 
     final repo = ref.watch(profileRepositoryProvider);
-    return repo.getByIdOrNull(user.id);
+    final store = await OfflineQrStore.open();
+    try {
+      final profile = await repo.getByIdOrNull(user.id);
+      if (profile != null) {
+        await store.saveOwnProfile(profile);
+      }
+      return profile;
+    } catch (e) {
+      final cached = store.loadOwnProfile(user.id);
+      if (cached != null) return cached;
+      rethrow;
+    }
   }
 
   void setProfile(Profile? profile) {
     state = AsyncData(profile);
+    if (profile != null) {
+      OfflineQrStore.open().then((store) => store.saveOwnProfile(profile));
+    }
   }
 
   Future<void> refresh({bool silent = false}) async {
@@ -63,7 +78,19 @@ class CurrentProfileNotifier extends AsyncNotifier<Profile?> {
     state = await AsyncValue.guard(() async {
       final user = ref.read(currentUserProvider);
       if (user == null) return null;
-      return ref.read(profileRepositoryProvider).getByIdOrNull(user.id);
+      final store = await OfflineQrStore.open();
+      try {
+        final profile =
+            await ref.read(profileRepositoryProvider).getByIdOrNull(user.id);
+        if (profile != null) {
+          await store.saveOwnProfile(profile);
+        }
+        return profile;
+      } catch (_) {
+        final cached = store.loadOwnProfile(user.id);
+        if (cached != null) return cached;
+        rethrow;
+      }
     });
   }
 }
@@ -109,7 +136,12 @@ class AuthController extends AsyncNotifier<void> {
   Future<void> logout() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
+      final uid = ref.read(currentUserProvider)?.id;
       await ref.read(authRepositoryProvider).logout();
+      if (uid != null) {
+        final store = await OfflineQrStore.open();
+        await store.clearUser(uid);
+      }
       _resetUserScopedProviders();
     });
   }

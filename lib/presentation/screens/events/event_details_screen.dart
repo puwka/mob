@@ -4,10 +4,11 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../core/utils/event_cover.dart';
 import '../../../domain/models/event.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/progression_providers.dart';
-import '../../../services/map_launcher.dart';
+import '../../../presentation/screens/map/place_map_screen.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/feedback.dart';
@@ -138,7 +139,7 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadii.card),
                 child: AspectRatio(
-                  aspectRatio: 16 / 8.5,
+                  aspectRatio: EventCoverSpecs.aspectRatio,
                   child: e.imageUrl == null || e.imageUrl!.isEmpty
                       ? Container(
                           color: AppColors.surfaceElevated,
@@ -358,10 +359,12 @@ class _Meta extends StatelessWidget {
 
 Future<void> _openEventMap(BuildContext context, Event event) async {
   try {
-    await MapLauncher.open(
+    await openPlaceMapInApp(
+      context,
       latitude: event.latitude,
       longitude: event.longitude,
       query: '${event.city}, ${event.location}',
+      title: 'Место проведения',
     );
   } catch (e) {
     if (!context.mounted) return;

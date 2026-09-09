@@ -138,7 +138,7 @@ class DialogsScreen extends ConsumerWidget {
                           subtitle: myClan?.name ??
                               _folderSubtitle(
                                 unread: unreadMap[ConversationType.clan] ?? 0,
-                                emptyHint: 'Общий чат и руководство',
+                                emptyHint: 'Чаты клана',
                               ),
                           meta: 'Папка',
                           icon: Icons.shield_outlined,

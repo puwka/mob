@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../core/utils/event_cover.dart';
 import '../../../domain/models/conversation.dart';
 import '../../../domain/models/polygon.dart';
 import '../../../presentation/providers/auth_providers.dart';
@@ -199,13 +200,20 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   Future<void> _pickPhoto() async {
     final file = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      maxWidth: 1600,
-      maxHeight: 1200,
-      imageQuality: 88,
+      maxWidth: EventCoverSpecs.width.toDouble(),
+      maxHeight: EventCoverSpecs.height.toDouble() * 2,
+      imageQuality: 92,
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();
-    setState(() => _photoBytes = bytes);
+    try {
+      final normalized = await normalizeEventCoverBytes(bytes);
+      if (!mounted) return;
+      setState(() => _photoBytes = normalized);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _photoBytes = bytes);
+    }
   }
 
   Future<void> _submit() async {
@@ -433,15 +441,23 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               },
             ),
             const SizedBox(height: 12),
-            const SectionTitle(title: 'Фото'),
+            const SectionTitle(title: 'Фото обложки'),
+            Text(
+              'Формат ${EventCoverSpecs.width}×${EventCoverSpecs.height} (16:9). '
+              'Фото обрежется по центру.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textTertiary,
+                    fontSize: 12,
+                  ),
+            ),
+            const SizedBox(height: 8),
             AppCard(
               onTap: _pickPhoto,
               padding: EdgeInsets.zero,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadii.card - 1),
-                child: SizedBox(
-                  height: 160,
-                  width: double.infinity,
+                child: AspectRatio(
+                  aspectRatio: EventCoverSpecs.aspectRatio,
                   child: _photoBytes != null
                       ? Image.memory(_photoBytes!, fit: BoxFit.cover)
                       : const ColoredBox(
@@ -456,7 +472,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 ),
                                 SizedBox(height: 6),
                                 Text(
-                                  'Добавить фото',
+                                  'Добавить фото 16:9',
                                   style: TextStyle(
                                     color: AppColors.textSecondary,
                                     fontSize: 13,

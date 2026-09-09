@@ -161,8 +161,9 @@ class MyQrScreen extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'Покажите этот QR организатору при посещении мероприятия',
+                      child:                       Text(
+                        'Покажите этот QR организатору при посещении мероприятия. '
+                        'Работает без интернета, если вы уже входили в аккаунт.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: AppColors.textSecondary,
                               fontSize: 13,

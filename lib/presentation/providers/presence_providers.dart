@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/presence.dart';
 import 'auth_providers.dart';
+import 'offline_qr_providers.dart';
 
 /// Keeps `profiles.last_seen_at` fresh while the app is in foreground.
 final presenceHeartbeatProvider = Provider<void>((ref) {
@@ -75,6 +76,13 @@ class _PresenceLifecycleState extends ConsumerState<PresenceLifecycle>
       final user = ref.read(currentUserProvider);
       if (user != null) {
         unawaited(ref.read(profileRepositoryProvider).touchPresence());
+        final offline = ref.read(offlineAttendanceServiceProvider);
+        if (offline != null) {
+          unawaited(() async {
+            await offline.syncPending();
+            bumpPendingAttendanceTick(ref);
+          }());
+        }
       }
     }
   }

@@ -53,6 +53,62 @@ enum ProfileBadgeRole {
         ProfileBadgeRole.sherpa => 'Шерп',
         ProfileBadgeRole.user => 'Пользователь',
       };
+
+  /// Status badges worth showing next to the nickname.
+  bool get isPrivileged => this != ProfileBadgeRole.user;
+}
+
+/// In-game combat role selected in profile editing (`profiles.game_role`).
+enum GameRole {
+  assault,
+  sniper,
+  medic,
+  recon,
+  support,
+  marksman,
+  grenadier;
+
+  static const dbValues = {
+    'assault',
+    'sniper',
+    'medic',
+    'recon',
+    'support',
+    'marksman',
+    'grenadier',
+  };
+
+  static GameRole? tryParse(String? value) {
+    if (value == null) return null;
+    final v = value.trim().toLowerCase();
+    if (v.isEmpty) return null;
+    return switch (v) {
+      'assault' || 'штурмовик' || 'штурм' => GameRole.assault,
+      'sniper' || 'снайпер' => GameRole.sniper,
+      'medic' || 'медик' => GameRole.medic,
+      'recon' || 'разведчик' || 'разведка' => GameRole.recon,
+      'support' || 'пулемётчик' || 'пулеметчик' || 'поддержка' =>
+        GameRole.support,
+      'marksman' || 'марксман' || 'dmr' => GameRole.marksman,
+      'grenadier' || 'гренадер' || 'подрывник' => GameRole.grenadier,
+      _ => null,
+    };
+  }
+
+  static GameRole fromString(String? value) =>
+      tryParse(value) ?? GameRole.assault;
+
+  String get dbValue => name;
+
+  String get labelRu => switch (this) {
+        GameRole.assault => 'Штурмовик',
+        GameRole.sniper => 'Снайпер',
+        GameRole.medic => 'Медик',
+        GameRole.recon => 'Разведчик',
+        GameRole.support => 'Пулемётчик',
+        GameRole.marksman => 'Марксман',
+        GameRole.grenadier => 'Гренадер',
+      };
 }
 
 class Profile {
@@ -96,6 +152,16 @@ class Profile {
   final DateTime createdAt;
 
   bool get isOrganizer => appRole.isOrganizer;
+
+  GameRole? get parsedGameRole => GameRole.tryParse(gameRole);
+
+  String get gameRoleLabel {
+    final parsed = parsedGameRole;
+    if (parsed != null) return parsed.labelRu;
+    final raw = gameRole?.trim();
+    if (raw != null && raw.isNotEmpty) return raw;
+    return 'Не указан';
+  }
 
   /// Short public id for UI (first 8 of public_qr_id).
   String get shortQrLabel {

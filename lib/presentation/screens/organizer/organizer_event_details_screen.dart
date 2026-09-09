@@ -11,7 +11,7 @@ import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
-import '../../../services/map_launcher.dart';
+import '../../../presentation/screens/map/place_map_screen.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/feedback.dart';
@@ -205,10 +205,12 @@ class _OrganizerEventDetailsScreenState
                     InkWell(
                       onTap: () async {
                         try {
-                          await MapLauncher.open(
+                          await openPlaceMapInApp(
+                            context,
                             latitude: event.latitude,
                             longitude: event.longitude,
                             query: '${event.city}, ${event.location}',
+                            title: 'Место проведения',
                           );
                         } catch (e) {
                           if (!context.mounted) return;

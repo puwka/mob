@@ -165,6 +165,8 @@ class ProfileController extends AsyncNotifier<void> {
     String? city,
     String? bio,
     bool clearBio = false,
+    String? gameRole,
+    bool clearGameRole = false,
     String? avatarUrl,
     bool clearAvatarUrl = false,
   }) async {
@@ -189,6 +191,8 @@ class ProfileController extends AsyncNotifier<void> {
             city: city,
             bio: bio,
             clearBio: clearBio,
+            gameRole: gameRole,
+            clearGameRole: clearGameRole,
             avatarUrl: avatarUrl,
             clearAvatarUrl: clearAvatarUrl,
           );

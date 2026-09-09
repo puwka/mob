@@ -6,10 +6,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../../domain/models/app_notification.dart';
 import '../../../domain/models/conversation.dart';
 import '../../../domain/models/dating.dart';
 import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/dating_providers.dart';
+import '../../../presentation/providers/notification_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../dating/dating_match_dialog.dart';
 
@@ -33,10 +35,12 @@ class _MainScreenState extends ConsumerState<MainScreen>
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(pendingDatingNotificationsProvider.notifier).refresh(silent: true);
+      ref.read(pendingAppNotificationsProvider.notifier).refresh(silent: true);
     });
-    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 90), (_) {
       if (!mounted || _showingAlert) return;
       ref.read(pendingDatingNotificationsProvider.notifier).refresh(silent: true);
+      ref.read(pendingAppNotificationsProvider.notifier).refresh(silent: true);
     });
   }
 
@@ -51,16 +55,28 @@ class _MainScreenState extends ConsumerState<MainScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(pendingDatingNotificationsProvider.notifier).refresh(silent: true);
+      ref.read(pendingAppNotificationsProvider.notifier).refresh(silent: true);
     }
   }
 
   Future<void> _consumePending() async {
     if (_showingAlert || !mounted) return;
-    final pending =
-        ref.read(pendingDatingNotificationsProvider).valueOrNull;
-    if (pending == null || pending.isEmpty) return;
 
-    final notification = pending.first;
+    final datingPending =
+        ref.read(pendingDatingNotificationsProvider).valueOrNull;
+    if (datingPending != null && datingPending.isNotEmpty) {
+      await _consumeDating(datingPending.first);
+      return;
+    }
+
+    final appPending =
+        ref.read(pendingAppNotificationsProvider).valueOrNull;
+    if (appPending != null && appPending.isNotEmpty) {
+      await _consumeApp(appPending.first);
+    }
+  }
+
+  Future<void> _consumeDating(DatingNotification notification) async {
     _showingAlert = true;
     try {
       await ref
@@ -125,7 +141,53 @@ class _MainScreenState extends ConsumerState<MainScreen>
     } finally {
       _showingAlert = false;
       if (mounted) {
-        // Show next pending alert if any.
+        WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());
+      }
+    }
+  }
+
+  Future<void> _consumeApp(AppNotification notification) async {
+    _showingAlert = true;
+    try {
+      await ref
+          .read(pendingAppNotificationsProvider.notifier)
+          .markSeen(notification.id);
+      if (!mounted) return;
+
+      final open = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text(notification.title),
+          content: Text(
+            notification.body.isEmpty
+                ? (notification.isEvent
+                    ? 'В вашем городе появилась новая игра.'
+                    : 'Новое сообщение в диалоге.')
+                : notification.body,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Позже'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(notification.isEvent ? 'Открыть' : 'Перейти'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || open != true) return;
+
+      if (notification.isEvent && notification.eventId != null) {
+        context.push('/main/games/${notification.eventId}');
+      } else if (notification.isChat && notification.conversationId != null) {
+        context.push('/main/chats/${notification.conversationId}');
+      }
+    } finally {
+      _showingAlert = false;
+      if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());
       }
     }
@@ -196,6 +258,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
       initialLocation: index == widget.navigationShell.currentIndex,
     );
     ref.read(pendingDatingNotificationsProvider.notifier).refresh(silent: true);
+    ref.read(pendingAppNotificationsProvider.notifier).refresh(silent: true);
   }
 
   @override
@@ -203,6 +266,11 @@ class _MainScreenState extends ConsumerState<MainScreen>
     final index = widget.navigationShell.currentIndex;
 
     ref.listen(pendingDatingNotificationsProvider, (prev, next) {
+      final list = next.valueOrNull;
+      if (list == null || list.isEmpty || _showingAlert) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());
+    });
+    ref.listen(pendingAppNotificationsProvider, (prev, next) {
       final list = next.valueOrNull;
       if (list == null || list.isEmpty || _showingAlert) return;
       WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());

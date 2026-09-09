@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/event.dart';
+import '../../../presentation/providers/offline_qr_providers.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/feedback.dart';
@@ -16,6 +17,7 @@ class OrganizerScannerPickScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(myOrganizerEventsProvider);
+    final pending = ref.watch(pendingAttendanceCountProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -46,12 +48,41 @@ class OrganizerScannerPickScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
               const Text(
-                'Выберите мероприятие для сканирования',
+                'Выберите мероприятие для сканирования. '
+                'Перед выездом на полигон откройте сканер при интернете — '
+                'список участников сохранится офлайн.',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
+                  height: 1.35,
                 ),
               ),
+              if (pending > 0) ...[
+                const SizedBox(height: 10),
+                AppCard(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.cloud_upload_outlined,
+                        color: AppColors.accent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Офлайн-сканов ждёт синхронизации: $pending',
+                          style: const TextStyle(
+                            color: AppColors.accent,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               for (final e in active) ...[
                 AppCard(

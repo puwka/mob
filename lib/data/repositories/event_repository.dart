@@ -39,7 +39,10 @@ class EventRepository {
       // Public feed: active (+ optionally finished later)
       query = query.inFilter('status', ['active', 'finished']);
 
-      final rows = await query.order('event_date', ascending: true);
+      final rows = await query
+          .order('event_date', ascending: true)
+          .limit(60)
+          .timeout(const Duration(seconds: 20));
       return _hydrateList(rows as List);
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
@@ -88,22 +91,27 @@ class EventRepository {
     if (base.isEmpty) return base;
 
     final ids = base.map((e) => e.id).toList();
-    final counts = <String, int>{};
-    try {
-      final partRows = await _client
-          .from('event_participants')
-          .select('event_id')
-          .eq('registration_status', 'registered')
-          .inFilter('event_id', ids);
-      for (final raw in partRows as List) {
-        final id = (raw as Map)['event_id'] as String;
-        counts[id] = (counts[id] ?? 0) + 1;
-      }
-    } catch (_) {}
-
     final userId = _client.auth.currentUser?.id;
-    final joinedIds = <String>{};
-    if (userId != null) {
+
+    final countsFut = () async {
+      final counts = <String, int>{};
+      try {
+        final partRows = await _client
+            .from('event_participants')
+            .select('event_id')
+            .eq('registration_status', 'registered')
+            .inFilter('event_id', ids);
+        for (final raw in partRows as List) {
+          final id = (raw as Map)['event_id'] as String;
+          counts[id] = (counts[id] ?? 0) + 1;
+        }
+      } catch (_) {}
+      return counts;
+    }();
+
+    final joinedFut = () async {
+      final joinedIds = <String>{};
+      if (userId == null) return joinedIds;
       try {
         final joined = await _client
             .from('event_participants')
@@ -115,7 +123,11 @@ class EventRepository {
           joinedIds.add((row as Map)['event_id'] as String);
         }
       } catch (_) {}
-    }
+      return joinedIds;
+    }();
+
+    final counts = await countsFut;
+    final joinedIds = await joinedFut;
 
     return [
       for (final event in base)
@@ -159,7 +171,7 @@ class EventRepository {
           .select(
             'id, event_id, user_id, registration_status, attendance_status, '
             'registered_at, attended_at, confirmed_by, '
-            'profile:profiles!user_id(nickname, city, avatar_url)',
+            'profile:profiles!user_id(nickname, city, avatar_url, public_qr_id)',
           )
           .eq('event_id', eventId)
           .eq('registration_status', 'registered')
@@ -184,13 +196,14 @@ class EventRepository {
           final map = Map<String, dynamic>.from(raw as Map);
           final profile = await _client
               .from('profiles')
-              .select('nickname, city, avatar_url')
+              .select('nickname, city, avatar_url, public_qr_id')
               .eq('id', map['user_id'] as String)
               .maybeSingle();
           if (profile != null) {
             map['nickname'] = profile['nickname'];
             map['city'] = profile['city'];
             map['avatar_url'] = profile['avatar_url'];
+            map['public_qr_id'] = profile['public_qr_id'];
           }
           list.add(EventParticipant.fromJson(map));
         }

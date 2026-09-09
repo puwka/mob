@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/utils/event_cover.dart';
 
 class EventListSkeleton extends StatelessWidget {
   const EventListSkeleton({super.key, this.count = 5});
@@ -13,7 +14,7 @@ class EventListSkeleton extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
       itemCount: count,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) => const _SkeletonRow(),
     );
   }
@@ -56,7 +57,7 @@ class _SkeletonRowState extends State<_SkeletonRow>
         );
       },
       child: Container(
-        height: 92,
+        height: EventCoverSpecs.listCardHeight,
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(AppRadii.card),
@@ -64,22 +65,25 @@ class _SkeletonRowState extends State<_SkeletonRow>
         ),
         child: Row(
           children: [
-            Container(width: 92, color: AppColors.surfaceElevated),
+            Container(
+              width: EventCoverSpecs.listThumbWidth,
+              color: AppColors.surfaceElevated,
+            ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      height: 12,
-                      width: 140,
+                      height: 13,
+                      width: 150,
                       color: AppColors.surfaceElevated,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Container(
                       height: 10,
-                      width: 100,
+                      width: 110,
                       color: AppColors.surfaceElevated,
                     ),
                     const Spacer(),

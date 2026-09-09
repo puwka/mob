@@ -218,6 +218,7 @@ class EventParticipant {
     this.nickname,
     this.city,
     this.avatarUrl,
+    this.publicQrId,
   });
 
   final String id;
@@ -231,6 +232,7 @@ class EventParticipant {
   final String? nickname;
   final String? city;
   final String? avatarUrl;
+  final String? publicQrId;
 
   bool get isConfirmed => attendanceStatus == AttendanceStatus.confirmed;
 
@@ -262,6 +264,29 @@ class EventParticipant {
       city: profile?['city'] as String? ?? json['city'] as String?,
       avatarUrl:
           profile?['avatar_url'] as String? ?? json['avatar_url'] as String?,
+      publicQrId: profile?['public_qr_id'] as String? ??
+          json['public_qr_id'] as String?,
+    );
+  }
+
+  EventParticipant copyWith({
+    AttendanceStatus? attendanceStatus,
+    DateTime? attendedAt,
+    String? confirmedBy,
+  }) {
+    return EventParticipant(
+      id: id,
+      eventId: eventId,
+      userId: userId,
+      registrationStatus: registrationStatus,
+      attendanceStatus: attendanceStatus ?? this.attendanceStatus,
+      registeredAt: registeredAt,
+      attendedAt: attendedAt ?? this.attendedAt,
+      confirmedBy: confirmedBy ?? this.confirmedBy,
+      nickname: nickname,
+      city: city,
+      avatarUrl: avatarUrl,
+      publicQrId: publicQrId,
     );
   }
 }
@@ -278,6 +303,7 @@ class AttendanceConfirmResult {
     this.rewardAmount = 0,
     this.balance = 0,
     this.currency = 'credits',
+    this.pendingSync = false,
   });
 
   final String userId;
@@ -290,6 +316,8 @@ class AttendanceConfirmResult {
   final num rewardAmount;
   final num balance;
   final String currency;
+  /// Confirmed locally without network; will sync when online.
+  final bool pendingSync;
 
   String get rewardLabel => '+${_fmt(rewardAmount)} CR';
   String get balanceLabel => '${_fmt(balance)} CR';

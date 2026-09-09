@@ -4,6 +4,7 @@ import '../../data/repositories/achievement_repository.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/cities_repository.dart';
 import '../../data/repositories/clan_repository.dart';
+import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/dating_repository.dart';
 import '../../data/repositories/event_repository.dart';
 import '../../data/repositories/listing_repository.dart';
@@ -39,6 +40,10 @@ final clanRepositoryProvider = Provider<ClanRepository>((ref) {
 
 final datingRepositoryProvider = Provider<DatingRepository>((ref) {
   return DatingRepository(ref.watch(supabaseClientProvider));
+});
+
+final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
+  return NotificationRepository(ref.watch(supabaseClientProvider));
 });
 
 final rankingRepositoryProvider = Provider<RankingRepository>((ref) {

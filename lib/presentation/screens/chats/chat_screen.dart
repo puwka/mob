@@ -14,7 +14,9 @@ import '../../../core/utils/presence.dart';
 import '../../../domain/models/conversation.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/chat_providers.dart';
+import '../../../presentation/providers/clan_providers.dart';
 import '../../../presentation/providers/dating_providers.dart';
+import '../../../presentation/providers/notification_providers.dart';
 import '../../../presentation/providers/presence_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../services/chat_voice_recorder.dart';
@@ -22,7 +24,14 @@ import '../../../widgets/feedback.dart';
 import '../../../widgets/presence_status.dart';
 import '../dating/dating_moderation_sheets.dart';
 
-enum _ChatPeerAction { block, report, delete }
+enum _ChatPeerAction {
+  block,
+  report,
+  delete,
+  muteNotifications,
+  unmuteNotifications,
+  participants,
+}
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.conversationId});
@@ -115,6 +124,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             SnackBar(content: Text(ErrorMapper.map(e))),
           );
         }
+      case _ChatPeerAction.muteNotifications:
+      case _ChatPeerAction.unmuteNotifications:
+        final muted = action == _ChatPeerAction.muteNotifications;
+        try {
+          await ref.read(notificationRepositoryProvider).setConversationMuted(
+                conversationId: widget.conversationId,
+                muted: muted,
+              );
+          ref.invalidate(
+            conversationNotificationsMutedProvider(widget.conversationId),
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                muted
+                    ? 'Уведомления от этого диалога выключены'
+                    : 'Уведомления включены',
+              ),
+            ),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(ErrorMapper.map(e))),
+          );
+        }
+      case _ChatPeerAction.participants:
+        if (!mounted) return;
+        context.push('/main/chats/${widget.conversationId}/participants');
     }
   }
 
@@ -487,9 +526,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               final canDelete = d.type == ConversationType.user ||
                   d.type == ConversationType.market ||
                   d.type == ConversationType.dating;
-              if (!canModeratePeer && !canDelete) {
-                return const SizedBox.shrink();
-              }
+              final notificationsMuted = ref
+                      .watch(
+                        conversationNotificationsMutedProvider(
+                          widget.conversationId,
+                        ),
+                      )
+                      .valueOrNull ??
+                  false;
               return PopupMenuButton<_ChatPeerAction>(
                 tooltip: 'Ещё',
                 icon: const Icon(Icons.more_vert, size: 20),
@@ -509,6 +553,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       child: Text('Пожаловаться'),
                     ),
                   ],
+                  if (d.type == ConversationType.clan ||
+                      d.type == ConversationType.city ||
+                      d.type == ConversationType.event)
+                    const PopupMenuItem(
+                      value: _ChatPeerAction.participants,
+                      child: Text('Участники'),
+                    ),
+                  PopupMenuItem(
+                    value: notificationsMuted
+                        ? _ChatPeerAction.unmuteNotifications
+                        : _ChatPeerAction.muteNotifications,
+                    child: Text(
+                      notificationsMuted
+                          ? 'Включить уведомления'
+                          : 'Не уведомлять',
+                    ),
+                  ),
                   if (canDelete)
                     const PopupMenuItem(
                       value: _ChatPeerAction.delete,
@@ -638,6 +699,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   );
                 }
+
+                final detail = detailAsync.valueOrNull;
+                if (detail?.type == ConversationType.clan) {
+                  final clanId = detail!.clanId;
+                  final role = clanId == null
+                      ? null
+                      : ref.watch(myClanRoleProvider(clanId)).valueOrNull;
+                  final officersBlocked = detail.clanChannel ==
+                          ClanChatChannel.officers &&
+                      (role == null || !role.isLeadership);
+                  if (role == null || officersBlocked) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        'Писать в чат клана можно только после вступления',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    );
+                  }
+                }
+
                 return _recording
                   ? Row(
                       children: [
@@ -906,12 +993,27 @@ class _Bubble extends StatelessWidget {
             if (showSender) ...[
               GestureDetector(
                 onTap: onOpenProfile,
-                child: Text(
-                  message.displaySenderName,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: mine ? AppColors.accent : AppColors.accent,
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: message.displaySenderName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: mine ? AppColors.accent : AppColors.accent,
+                        ),
+                      ),
+                      if (message.senderClanRole != null)
+                        TextSpan(
+                          text: ' · ${message.senderClanRole!.labelRu}',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
