@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../data/repositories/profile_photo_repository.dart';
@@ -9,7 +10,9 @@ import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/profile_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/app_card.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/feedback.dart';
+import '../../../widgets/photo_lightbox.dart';
 
 class ProfilePhotosScreen extends ConsumerStatefulWidget {
   const ProfilePhotosScreen({super.key});
@@ -163,8 +166,13 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
                       child: GridView.builder(
                         itemCount: max,
                         gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
+                            SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: AppLayout.gridCount(
+                            context,
+                            minTile: 140,
+                            minCount: 2,
+                            maxCount: 3,
+                          ),
                           mainAxisSpacing: 8,
                           crossAxisSpacing: 8,
                           childAspectRatio: 0.85,
@@ -174,6 +182,11 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
                             final photo = photos[index];
                             return AppCard(
                               padding: EdgeInsets.zero,
+                              onTap: () => showPhotoLightbox(
+                                context,
+                                urls: [for (final p in photos) p.url],
+                                initialIndex: index,
+                              ),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
@@ -181,9 +194,11 @@ class _ProfilePhotosScreenState extends ConsumerState<ProfilePhotosScreen> {
                                     borderRadius: BorderRadius.circular(
                                       AppRadii.card - 1,
                                     ),
-                                    child: Image.network(
-                                      photo.url,
+                                    child: AppNetworkImage(
+                                      url: photo.url,
                                       fit: BoxFit.cover,
+                                      memCacheWidth: 480,
+                                      debugLabel: 'profile-gallery',
                                     ),
                                   ),
                                   Positioned(

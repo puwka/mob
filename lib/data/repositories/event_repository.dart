@@ -250,6 +250,45 @@ class EventRepository {
     }
   }
 
+  Future<void> updateEvent({
+    required String eventId,
+    required String title,
+    required String description,
+    required String city,
+    required String location,
+    required DateTime eventDate,
+    required int maxParticipants,
+    String? imageUrl,
+    bool clearImage = false,
+    EventStatus? status,
+    String? polygonId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      await _client.rpc(
+        'update_event',
+        params: {
+          'p_event_id': eventId,
+          'p_title': title,
+          'p_description': description,
+          'p_city': city,
+          'p_location': location,
+          'p_event_date': eventDate.toUtc().toIso8601String(),
+          'p_max_participants': maxParticipants,
+          'p_image_url': imageUrl,
+          'p_clear_image': clearImage,
+          'p_status': status?.dbValue,
+          'p_polygon_id': polygonId,
+          'p_latitude': latitude,
+          'p_longitude': longitude,
+        },
+      );
+    } catch (e) {
+      throw AppException(_mapEventError(e));
+    }
+  }
+
   Future<void> setEventImageUrl({
     required String eventId,
     required String imageUrl,
@@ -365,6 +404,9 @@ class EventRepository {
     }
     if (msg.contains('INVALID_COORDINATES')) return 'Некорректные координаты';
     if (msg.contains('POLYGON_NOT_FOUND')) return 'Полигон не найден';
+    if (msg.contains('LIMIT_BELOW_PARTICIPANTS')) {
+      return 'Лимит меньше числа уже записанных участников';
+    }
     return ErrorMapper.map(e);
   }
 

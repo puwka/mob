@@ -126,15 +126,19 @@ class ClanRepository {
           .eq('clan_id', clanId)
           .timeout(const Duration(seconds: 12));
 
+      final rawList = (rows as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      if (rawList.isEmpty) return const [];
+
+      final userIds = [
+        for (final m in rawList) m['user_id'] as String,
+      ];
+      final profilesById = await _fetchProfilesByIds(userIds);
+
       final members = <ClanMember>[];
-      for (final raw in rows as List) {
-        final map = Map<String, dynamic>.from(raw as Map);
-        final profile = await _client
-            .from('profiles')
-            .select('nickname, rating, avatar_url')
-            .eq('id', map['user_id'] as String)
-            .maybeSingle()
-            .timeout(const Duration(seconds: 8));
+      for (final map in rawList) {
+        final profile = profilesById[map['user_id'] as String];
         map['nickname'] = profile?['nickname'] ?? 'Боец';
         map['rating'] = profile?['rating'] ?? 0;
         map['avatar_url'] = profile?['avatar_url'];
@@ -150,6 +154,23 @@ class ClanRepository {
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
     }
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _fetchProfilesByIds(
+    List<String> userIds,
+  ) async {
+    if (userIds.isEmpty) return const {};
+    final rows = await _client
+        .from('profiles')
+        .select('id, nickname, rating, avatar_url')
+        .inFilter('id', userIds)
+        .timeout(const Duration(seconds: 12));
+    final out = <String, Map<String, dynamic>>{};
+    for (final raw in rows as List) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      out[map['id'] as String] = map;
+    }
+    return out;
   }
 
   Future<String> createClan({
@@ -271,18 +292,19 @@ class ClanRepository {
           .order('created_at', ascending: true)
           .timeout(const Duration(seconds: 12));
 
+      final rawList = (rows as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      if (rawList.isEmpty) return const [];
+
+      final userIds = [
+        for (final r in rawList) r['user_id'] as String,
+      ];
+      final profilesById = await _fetchProfilesByIds(userIds);
+
       final list = <ClanJoinRequest>[];
-      for (final raw in rows as List) {
-        final map = Map<String, dynamic>.from(raw as Map);
-        final profile = await _client
-            .from('profiles')
-            .select('nickname, rating, avatar_url')
-            .eq('id', map['user_id'] as String)
-            .maybeSingle();
-        map['nickname'] = profile?['nickname'];
-        map['rating'] = profile?['rating'] ?? 0;
-        map['avatar_url'] = profile?['avatar_url'];
-        // reshape for fromJson
+      for (final map in rawList) {
+        final profile = profilesById[map['user_id'] as String];
         map['profile'] = {
           'nickname': profile?['nickname'],
           'rating': profile?['rating'] ?? 0,

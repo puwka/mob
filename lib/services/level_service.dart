@@ -29,6 +29,7 @@ class XpService {
   /// + wins * 250
   /// + polygons_visited * 100
   /// + events_count * 100
+  /// + bonus_xp (admin)
   ///
   /// Stored as `profiles.rating` for leaderboards;
   /// clan rating = SUM(member XP).
@@ -37,20 +38,27 @@ class XpService {
     required int wins,
     required int polygonsVisited,
     required int eventsCount,
+    int bonusXp = 0,
   }) {
-    return gamesPlayed * 100 +
+    final xp = gamesPlayed * 100 +
         wins * 250 +
         polygonsVisited * 100 +
-        eventsCount * 100;
+        eventsCount * 100 +
+        bonusXp;
+    return xp < 0 ? 0 : xp;
   }
 
   int calculateFromProfile(Profile profile, {required int eventsCount}) {
-    return calculate(
+    final computed = calculate(
       gamesPlayed: profile.gamesPlayed,
       wins: profile.wins,
       polygonsVisited: profile.polygonsVisited,
       eventsCount: eventsCount,
+      bonusXp: profile.bonusXp,
     );
+    // `profiles.rating` is the synced total (activity + admin bonus). Prefer
+    // it when higher so admin XP raises level even if bonus_xp isn't loaded yet.
+    return profile.rating > computed ? profile.rating : computed;
   }
 }
 
@@ -65,12 +73,14 @@ class LevelService {
     required int wins,
     required int polygonsVisited,
     required int eventsCount,
+    int bonusXp = 0,
   }) {
     return xpService.calculate(
       gamesPlayed: gamesPlayed,
       wins: wins,
       polygonsVisited: polygonsVisited,
       eventsCount: eventsCount,
+      bonusXp: bonusXp,
     );
   }
 
@@ -123,12 +133,14 @@ class LevelService {
     required int wins,
     required int polygonsVisited,
     required int eventsCount,
+    int bonusXp = 0,
   }) {
     final xp = calculateXp(
       gamesPlayed: gamesPlayed,
       wins: wins,
       polygonsVisited: polygonsVisited,
       eventsCount: eventsCount,
+      bonusXp: bonusXp,
     );
     return calculateLevel(xp);
   }
@@ -137,11 +149,8 @@ class LevelService {
     Profile profile, {
     required int eventsCount,
   }) {
-    return calculateFromStats(
-      gamesPlayed: profile.gamesPlayed,
-      wins: profile.wins,
-      polygonsVisited: profile.polygonsVisited,
-      eventsCount: eventsCount,
+    return calculateLevel(
+      xpService.calculateFromProfile(profile, eventsCount: eventsCount),
     );
   }
 }

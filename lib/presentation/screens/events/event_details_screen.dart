@@ -11,6 +11,7 @@ import '../../../presentation/providers/progression_providers.dart';
 import '../../../presentation/screens/map/place_map_screen.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/level_up_overlay.dart';
 
@@ -148,17 +149,11 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
                             color: AppColors.textTertiary,
                           ),
                         )
-                      : Image.network(
-                          e.imageUrl!,
+                      : AppNetworkImage(
+                          url: e.imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                            color: AppColors.surfaceElevated,
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              color: AppColors.textTertiary,
-                            ),
-                          ),
+                          memCacheWidth: 1200,
+                          debugLabel: 'event-detail',
                         ),
                 ),
               ),

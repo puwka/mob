@@ -4,15 +4,17 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/event_cities.dart';
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
-import '../../../core/utils/event_cover.dart';
 import '../../../domain/models/event.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/app_network_image.dart';
+import '../../../widgets/app_page_body.dart';
 import '../../../widgets/event_list_skeleton.dart';
 import '../../../widgets/feedback.dart';
+import '../../../services/app_image_cache.dart';
 
 final eventFilterCitiesProvider = FutureProvider<List<String>>((ref) async {
   final names =
@@ -30,6 +32,7 @@ class EventsScreen extends ConsumerWidget {
     final cities =
         ref.watch(eventFilterCitiesProvider).valueOrNull ??
             EventCities.filterOptions;
+    final gutter = AppLayout.pageGutter(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Мероприятия')),
@@ -39,7 +42,7 @@ class EventsScreen extends ConsumerWidget {
             height: 40,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: gutter),
               itemCount: cities.length,
               separatorBuilder: (context, index) => const SizedBox(width: 6),
               itemBuilder: (context, index) {
@@ -79,54 +82,65 @@ class EventsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: eventsAsync.when(
-              loading: () => const EventListSkeleton(),
-              error: (e, _) => AsyncErrorRetry(
-                message: ErrorMapper.map(e),
-                onRetry: () =>
-                    ref.read(eventsListProvider.notifier).refresh(),
-              ),
-              data: (events) {
-                if (events.isEmpty) {
+            child: AppPageBody(
+              child: eventsAsync.when(
+                loading: () => const EventListSkeleton(),
+                error: (e, _) => AsyncErrorRetry(
+                  message: ErrorMapper.map(e),
+                  onRetry: () =>
+                      ref.read(eventsListProvider.notifier).refresh(),
+                ),
+                data: (events) {
+                  if (events.isEmpty) {
+                    return RefreshIndicator(
+                      color: AppColors.accent,
+                      onRefresh: () =>
+                          ref.read(eventsListProvider.notifier).refresh(),
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.all(gutter),
+                        children: const [
+                          SizedBox(height: 60),
+                          EmptyStateCard(
+                            title: 'Мероприятий не найдено',
+                            subtitle:
+                                'Попробуйте другой город или обновите список.',
+                            icon: Icons.event_busy_outlined,
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                   return RefreshIndicator(
                     color: AppColors.accent,
                     onRefresh: () =>
                         ref.read(eventsListProvider.notifier).refresh(),
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      children: const [
-                        SizedBox(height: 60),
-                        EmptyStateCard(
-                          title: 'Мероприятий не найдено',
-                          subtitle:
-                              'Попробуйте другой город или обновите список.',
-                          icon: Icons.event_busy_outlined,
-                        ),
-                      ],
+                    child: Builder(
+                      builder: (context) {
+                        AppImageCache.prefetch(
+                          events.take(16).map((e) => e.imageUrl),
+                          limit: 16,
+                        );
+                        return ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: AppLayout.pagePadding(context),
+                          itemCount: events.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final event = events[index];
+                            return EventRowCard(
+                              event: event,
+                              onTap: () =>
+                                  context.push('/main/games/${event.id}'),
+                            );
+                          },
+                        );
+                      },
                     ),
                   );
-                }
-                return RefreshIndicator(
-                  color: AppColors.accent,
-                  onRefresh: () =>
-                      ref.read(eventsListProvider.notifier).refresh(),
-                  child: ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                    itemCount: events.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final event = events[index];
-                      return EventRowCard(
-                        event: event,
-                        onTap: () => context.push('/main/games/${event.id}'),
-                      );
-                    },
-                  ),
-                );
-              },
+                },
+              ),
             ),
           ),
         ],
@@ -150,8 +164,8 @@ class EventRowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = DateFormat('d MMM', 'ru').format(event.eventDate.toLocal());
     final time = DateFormat('HH:mm', 'ru').format(event.eventDate.toLocal());
-    const h = EventCoverSpecs.listCardHeight;
-    const thumbW = EventCoverSpecs.listThumbWidth;
+    final h = AppLayout.eventListThumb(context);
+    final thumbW = h;
 
     return Material(
       color: Colors.transparent,
@@ -159,7 +173,7 @@ class EventRowCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadii.card),
         child: Container(
-          height: h,
+          constraints: BoxConstraints(minHeight: h),
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(AppRadii.card),
@@ -170,111 +184,119 @@ class EventRowCard extends StatelessWidget {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: Row(
-            children: [
-              SizedBox(
-                width: thumbW,
-                height: h,
-                child: event.imageUrl == null || event.imageUrl!.isEmpty
-                    ? const ColoredBox(
-                        color: AppColors.surfaceElevated,
-                        child: Center(
-                          child: Icon(
-                            Icons.image_outlined,
-                            color: AppColors.textTertiary,
-                            size: 26,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: thumbW,
+                  child: event.imageUrl == null || event.imageUrl!.isEmpty
+                      ? const ColoredBox(
+                          color: AppColors.surfaceElevated,
+                          child: Center(
+                            child: Icon(
+                              Icons.image_outlined,
+                              color: AppColors.textTertiary,
+                              size: 26,
+                            ),
+                          ),
+                        )
+                      : ColoredBox(
+                          color: AppColors.surfaceElevated,
+                          child: AppNetworkImage(
+                            url: event.imageUrl,
+                            fit: BoxFit.cover,
+                            // Only one mem-cache axis — both stretch the decode.
+                            memCacheWidth: (thumbW * MediaQuery.devicePixelRatioOf(context) * 1.5)
+                                .round()
+                                .clamp(64, 512),
+                            debugLabel: 'event-cover',
                           ),
                         ),
-                      )
-                      : AppNetworkImage(
-                          url: event.imageUrl,
-                          width: thumbW,
-                          height: h,
-                          fit: BoxFit.cover,
-                          memCacheWidth: 280,
-                          memCacheHeight: 280,
-                          debugLabel: 'event-cover',
-                        ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        event.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        '${event.city} · $date · $time',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontSize: 12,
-                            ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        event.location,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontSize: 12,
-                            ),
-                      ),
-                      const Spacer(),
-                      Row(
-                        children: [
-                          Text(
-                            '${event.participantsCount}/${event.maxParticipants}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  color: AppColors.accent,
-                                  fontSize: 13.5,
-                                ),
-                          ),
-                          const Spacer(),
-                          if (event.isParticipating)
-                            Text(
-                              'Вы в составе',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelMedium
-                                  ?.copyWith(
-                                    color: AppColors.accent,
-                                    fontSize: 11.5,
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontSize: 15.5,
                                     fontWeight: FontWeight.w700,
                                   ),
-                            )
-                          else
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          '${event.city} · $date · $time',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontSize: 12,
+                                  ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          event.location,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontSize: 12,
+                                  ),
+                        ),
+                        const Spacer(),
+                        Row(
+                          children: [
                             Text(
-                              event.isFull ? 'Мест нет' : 'Открыто',
+                              '${event.participantsCount}/${event.maxParticipants}',
                               style: Theme.of(context)
                                   .textTheme
-                                  .labelMedium
+                                  .titleMedium
                                   ?.copyWith(
-                                    color: event.isFull
-                                        ? AppColors.warning
-                                        : AppColors.textSecondary,
-                                    fontSize: 11.5,
+                                    color: AppColors.accent,
+                                    fontSize: 13.5,
                                   ),
                             ),
-                        ],
-                      ),
-                    ],
+                            const Spacer(),
+                            if (event.isParticipating)
+                              Text(
+                                'Вы в составе',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: AppColors.accent,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              )
+                            else
+                              Text(
+                                event.isFull ? 'Мест нет' : 'Открыто',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: event.isFull
+                                          ? AppColors.warning
+                                          : AppColors.textSecondary,
+                                      fontSize: 11.5,
+                                    ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

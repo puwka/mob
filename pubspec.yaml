@@ -26,11 +26,14 @@ dependencies:
   path_provider: ^2.1.6
   path: ^1.9.1
   http: ^1.6.0
-  flutter_map: ^8.3.2
-  latlong2: ^0.10.1
   url_launcher: ^6.3.2
   cached_network_image: ^3.4.1
   shared_preferences: ^2.5.5
+  flutter_cache_manager: ^3.4.2
+  yandex_maps_mapkit_lite: ^4.42.0
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+  flutter_local_notifications: ^19.4.2
 
 dev_dependencies:
   flutter_test:

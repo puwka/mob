@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/presence.dart';
@@ -20,7 +21,9 @@ import '../../../presentation/providers/notification_providers.dart';
 import '../../../presentation/providers/presence_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../services/chat_voice_recorder.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/feedback.dart';
+import '../../../widgets/photo_lightbox.dart';
 import '../../../widgets/presence_status.dart';
 import '../dating/dating_moderation_sheets.dart';
 
@@ -50,6 +53,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   var _recording = false;
   var _hasText = false;
   Timer? _recordTicker;
+  ChatMessage? _replyTo;
 
   Future<void> _onPeerAction(
     _ChatPeerAction action, {
@@ -179,19 +183,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    final atBottom = _scroll.position.pixels >=
-        _scroll.position.maxScrollExtent - 48;
+    // reverse: true → 0 = newest (bottom), maxScrollExtent = oldest (top)
+    final atBottom = _scroll.position.pixels <= 48;
     _stickToBottom = atBottom;
 
-    if (_scroll.position.pixels <= 48) {
+    if (_scroll.position.pixels >=
+        _scroll.position.maxScrollExtent - 48) {
       ref.read(chatMessagesProvider(widget.conversationId).notifier).loadMore();
     }
   }
 
   void _scrollToBottom({bool animated = true}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void jump() {
       if (!_scroll.hasClients) return;
-      final target = _scroll.position.maxScrollExtent;
+      const target = 0.0;
       if (animated) {
         _scroll.animateTo(
           target,
@@ -201,6 +206,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       } else {
         _scroll.jumpTo(target);
       }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      jump();
+      // Second frame: list extent can grow after first layout (images, etc.).
+      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     });
   }
 
@@ -213,12 +224,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _send() async {
     final text = _input.text;
+    final reply = _replyTo;
     final ok = await ref
         .read(chatMessagesProvider(widget.conversationId).notifier)
-        .send(text);
+        .send(
+          text,
+          replyToMessageId: reply?.id,
+          replyTo: reply == null ? null : ChatReplyPreview.fromMessage(reply),
+        );
     if (!mounted) return;
     if (ok) {
       _input.clear();
+      setState(() => _replyTo = null);
       _stickToBottom = true;
       _scrollToBottom();
     } else {
@@ -232,6 +249,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         );
       }
     }
+  }
+
+  void _startReply(ChatMessage message) {
+    if (message.isDeleted || message.pending) return;
+    setState(() => _replyTo = message);
   }
 
   Future<void> _startRecording() async {
@@ -313,6 +335,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
+    final reply = _replyTo;
     final ok = await ref
         .read(chatMessagesProvider(widget.conversationId).notifier)
         .sendVoice(
@@ -320,9 +343,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           durationMs: capture.durationMs.clamp(500, 120000),
           contentType: capture.contentType,
           extension: capture.extension,
+          replyToMessageId: reply?.id,
+          replyTo: reply == null ? null : ChatReplyPreview.fromMessage(reply),
         );
     if (!mounted) return;
     if (ok) {
+      setState(() => _replyTo = null);
       _stickToBottom = true;
       _scrollToBottom();
     } else {
@@ -339,22 +365,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _pickAndSendImage() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
+    const maxImages = 10;
+    final files = await ImagePicker().pickMultiImage(
       maxWidth: 1600,
       maxHeight: 1600,
       imageQuality: 88,
+      limit: maxImages,
     );
-    if (file == null) return;
+    if (files.isEmpty) return;
 
-    final bytes = await file.readAsBytes();
-    if (bytes.isEmpty) return;
+    if (files.length > maxImages) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Максимум $maxImages фото за сообщение'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
 
+    final images = <Uint8List>[];
+    for (final file in files.take(maxImages)) {
+      final bytes = await file.readAsBytes();
+      if (bytes.isNotEmpty) images.add(Uint8List.fromList(bytes));
+    }
+    if (images.isEmpty) return;
+
+    final reply = _replyTo;
     final ok = await ref
         .read(chatMessagesProvider(widget.conversationId).notifier)
-        .sendImage(bytes: Uint8List.fromList(bytes));
+        .sendImages(
+          images: images,
+          replyToMessageId: reply?.id,
+          replyTo: reply == null ? null : ChatReplyPreview.fromMessage(reply),
+        );
     if (!mounted) return;
     if (ok) {
+      setState(() => _replyTo = null);
       _stickToBottom = true;
       _scrollToBottom();
     } else {
@@ -379,8 +426,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final myId = ref.watch(authRepositoryProvider).currentUser?.id;
 
     ref.listen(chatMessagesProvider(widget.conversationId), (prev, next) {
-      if (_stickToBottom &&
-          (prev?.messages.length ?? 0) < next.messages.length) {
+      final wasEmpty = (prev?.messages.isEmpty ?? true);
+      final grew = (prev?.messages.length ?? 0) < next.messages.length;
+      if (wasEmpty && next.messages.isNotEmpty) {
+        _stickToBottom = true;
+        _scrollToBottom(animated: false);
+        return;
+      }
+      if (_stickToBottom && grew) {
         _scrollToBottom();
       }
     });
@@ -468,7 +521,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             )
                         else if (d.type == ConversationType.dating)
                           const Text(
-                            'Знакомства',
+                            'Дейтинг',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: AppColors.textTertiary,
@@ -629,11 +682,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           )
                         : ListView.builder(
                             controller: _scroll,
+                            reverse: true,
                             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                             itemCount: messagesState.messages.length +
                                 (messagesState.loadingMore ? 1 : 0),
                             itemBuilder: (context, index) {
-                              if (messagesState.loadingMore && index == 0) {
+                              final messages = messagesState.messages;
+                              // reverse: index 0 at bottom = newest message
+                              if (messagesState.loadingMore &&
+                                  index == messages.length) {
                                 return const Padding(
                                   padding: EdgeInsets.all(8),
                                   child: Center(
@@ -647,25 +704,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   ),
                                 );
                               }
-                              final msgIndex = messagesState.loadingMore
-                                  ? index - 1
-                                  : index;
-                              final msg = messagesState.messages[msgIndex];
+                              final msgIndex = messages.length - 1 - index;
+                              final msg = messages[msgIndex];
                               final mine = msg.senderId == myId;
                               final prev = msgIndex > 0
-                                  ? messagesState.messages[msgIndex - 1]
+                                  ? messages[msgIndex - 1]
                                   : null;
-                              final showSender = prev == null ||
-                                  prev.senderId != msg.senderId;
-                              return _Bubble(
-                                message: msg,
-                                mine: mine,
-                                showSender: showSender,
-                                onOpenProfile: msg.senderId == myId
-                                    ? null
-                                    : () => context.push(
-                                          '/main/profile/user/${msg.senderId}',
-                                        ),
+                              final type = detailAsync.valueOrNull?.type;
+                              final isGroupChat = type == ConversationType.clan ||
+                                  type == ConversationType.city ||
+                                  type == ConversationType.event;
+                              final isNewSender =
+                                  prev == null || prev.senderId != msg.senderId;
+                              // Groups: nick + avatar on sender change.
+                              // 1-on-1: avatar only (no nick in bubble).
+                              final showSenderName = isGroupChat && isNewSender;
+                              final showAvatar = isNewSender;
+                              return _SwipeToReply(
+                                enabled: !msg.isDeleted && !msg.pending,
+                                onReply: () => _startReply(msg),
+                                child: _Bubble(
+                                  message: msg,
+                                  mine: mine,
+                                  showSenderName: showSenderName,
+                                  showAvatar: showAvatar,
+                                  onOpenProfile: msg.senderId == myId
+                                      ? null
+                                      : () => context.push(
+                                            '/main/profile/user/${msg.senderId}',
+                                          ),
+                                ),
                               );
                             },
                           ),
@@ -725,7 +793,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   }
                 }
 
-                return _recording
+                final composer = _recording
                   ? Row(
                       children: [
                         IconButton(
@@ -851,7 +919,198 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                       ],
                     );
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_replyTo != null) ...[
+                      _ReplyComposerBar(
+                        message: _replyTo!,
+                        onClose: () => setState(() => _replyTo = null),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    composer,
+                  ],
+                );
               }(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SwipeToReply extends StatefulWidget {
+  const _SwipeToReply({
+    required this.enabled,
+    required this.onReply,
+    required this.child,
+  });
+
+  final bool enabled;
+  final VoidCallback onReply;
+  final Widget child;
+
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply> {
+  static const _maxDrag = 72.0;
+  static const _trigger = 48.0;
+
+  double _dx = 0;
+
+  void _reset() {
+    setState(() => _dx = 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+
+    final progress = (-_dx / _trigger).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragUpdate: (details) {
+        final next = (_dx + details.delta.dx).clamp(-_maxDrag, 0.0);
+        setState(() => _dx = next);
+      },
+      onHorizontalDragEnd: (_) {
+        final shouldReply = -_dx >= _trigger;
+        _reset();
+        if (shouldReply) widget.onReply();
+      },
+      onHorizontalDragCancel: _reset,
+      child: Stack(
+        alignment: Alignment.centerRight,
+        children: [
+          Opacity(
+            opacity: progress,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Icon(
+                Icons.reply_rounded,
+                size: 22,
+                color: AppColors.accent.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+          Transform.translate(
+            offset: Offset(_dx, 0),
+            child: widget.child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReplyComposerBar extends StatelessWidget {
+  const _ReplyComposerBar({
+    required this.message,
+    required this.onClose,
+  });
+
+  final ChatMessage message;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = ChatReplyPreview.fromMessage(message);
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.accent,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                preview.displaySenderName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.accent,
+                ),
+              ),
+              Text(
+                preview.previewText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Отменить ответ',
+          onPressed: onClose,
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.close, size: 18),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReplyQuote extends StatelessWidget {
+  const _ReplyQuote({
+    required this.preview,
+    required this.mine,
+  });
+
+  final ChatReplyPreview preview;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+      decoration: BoxDecoration(
+        color: mine
+            ? const Color(0x22000000)
+            : AppColors.surface.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(color: AppColors.accent, width: 2.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            preview.displaySenderName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.accent,
+            ),
+          ),
+          Text(
+            preview.previewText,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
             ),
           ),
         ],
@@ -952,13 +1211,15 @@ class _Bubble extends StatelessWidget {
   const _Bubble({
     required this.message,
     required this.mine,
-    required this.showSender,
+    required this.showSenderName,
+    required this.showAvatar,
     this.onOpenProfile,
   });
 
   final ChatMessage message;
   final bool mine;
-  final bool showSender;
+  final bool showSenderName;
+  final bool showAvatar;
   final VoidCallback? onOpenProfile;
 
   @override
@@ -977,7 +1238,7 @@ class _Bubble extends StatelessWidget {
       ),
       child: Container(
         margin: EdgeInsets.only(
-          top: showSender ? 6 : 2,
+          top: showAvatar ? 6 : 2,
           bottom: 2,
         ),
         padding: const EdgeInsets.fromLTRB(10, 7, 10, 6),
@@ -990,7 +1251,7 @@ class _Bubble extends StatelessWidget {
           crossAxisAlignment:
               mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (showSender) ...[
+            if (showSenderName) ...[
               GestureDetector(
                 onTap: onOpenProfile,
                 child: Text.rich(
@@ -1019,6 +1280,13 @@ class _Bubble extends StatelessWidget {
               ),
               const SizedBox(height: 3),
             ],
+            if (message.replyTo != null && !message.isDeleted) ...[
+              _ReplyQuote(
+                preview: message.replyTo!,
+                mine: mine,
+              ),
+              const SizedBox(height: 5),
+            ],
             if (message.isDeleted)
               const Text(
                 'Сообщение удалено',
@@ -1036,7 +1304,7 @@ class _Bubble extends StatelessWidget {
               )
             else if (message.isImage)
               _ChatImageBubble(
-                url: message.imageUrl,
+                urls: message.resolvedImageUrls,
                 pending: message.pending,
               )
             else
@@ -1111,13 +1379,13 @@ class _Bubble extends StatelessWidget {
             mine ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!mine) ...[
-            if (showSender) avatarWidget else const SizedBox(width: 32),
+            if (showAvatar) avatarWidget else const SizedBox(width: 32),
             const SizedBox(width: 8),
           ],
           bubble,
           if (mine) ...[
             const SizedBox(width: 8),
-            if (showSender) avatarWidget else const SizedBox(width: 32),
+            if (showAvatar) avatarWidget else const SizedBox(width: 32),
           ],
         ],
       ),
@@ -1195,17 +1463,20 @@ class _RecordingPulseDotState extends State<_RecordingPulseDot>
 
 class _ChatImageBubble extends StatelessWidget {
   const _ChatImageBubble({
-    required this.url,
+    required this.urls,
     required this.pending,
   });
 
-  final String? url;
+  final List<String> urls;
   final bool pending;
 
   @override
   Widget build(BuildContext context) {
-    final src = url?.trim();
-    if (src == null || src.isEmpty) {
+    final cleaned = [
+      for (final u in urls)
+        if (u.trim().isNotEmpty) u.trim(),
+    ];
+    if (cleaned.isEmpty) {
       return SizedBox(
         width: 160,
         height: 120,
@@ -1222,57 +1493,115 @@ class _ChatImageBubble extends StatelessWidget {
       );
     }
 
+    if (cleaned.length == 1) {
+      return _ChatImageThumb(
+        url: cleaned.first,
+        pending: pending,
+        onTap: () => showPhotoLightbox(
+          context,
+          urls: cleaned,
+          initialIndex: 0,
+        ),
+      );
+    }
+
+    final max = AppLayout.chatImageMax(context);
+    final gap = 3.0;
+    final cell = (max - gap) / 2;
+
+    Widget tile(int index) {
+      return _ChatImageThumb(
+        url: cleaned[index],
+        pending: pending,
+        width: cell,
+        height: cell,
+        onTap: () => showPhotoLightbox(
+          context,
+          urls: cleaned,
+          initialIndex: index,
+        ),
+      );
+    }
+
+    // 2–4: 2x2-ish; 5+: wrap rows of 2
+    final rows = <Widget>[];
+    for (var i = 0; i < cleaned.length; i += 2) {
+      final hasSecond = i + 1 < cleaned.length;
+      rows.add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            tile(i),
+            if (hasSecond) ...[
+              SizedBox(width: gap),
+              tile(i + 1),
+            ],
+          ],
+        ),
+      );
+      if (i + 2 < cleaned.length) {
+        rows.add(SizedBox(height: gap));
+      }
+    }
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: max),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows,
+      ),
+    );
+  }
+}
+
+class _ChatImageThumb extends StatelessWidget {
+  const _ChatImageThumb({
+    required this.url,
+    required this.pending,
+    required this.onTap,
+    this.width,
+    this.height,
+  });
+
+  final String url;
+  final bool pending;
+  final VoidCallback onTap;
+  final double? width;
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) {
+    final max = AppLayout.chatImageMax(context);
+    final w = width ?? max;
+    final h = height ?? max;
+
     return GestureDetector(
-      onTap: () {
-        showDialog<void>(
-          context: context,
-          builder: (context) => Dialog(
-            backgroundColor: Colors.black,
-            insetPadding: const EdgeInsets.all(12),
-            child: InteractiveViewer(
-              child: Image.network(src, fit: BoxFit.contain),
-            ),
-          ),
-        );
-      },
+      onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: 220,
-            maxHeight: 280,
-            minWidth: 120,
-            minHeight: 100,
-          ),
+        child: SizedBox(
+          width: w,
+          height: h,
           child: Stack(
-            alignment: Alignment.center,
+            fit: StackFit.expand,
             children: [
-              Image.network(
-                src,
+              AppNetworkImage(
+                url: url,
                 fit: BoxFit.cover,
-                width: 220,
-                height: 220,
-                errorBuilder: (_, error, stackTrace) => const SizedBox(
-                  width: 160,
-                  height: 120,
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
+                width: w,
+                height: h,
+                showSpinner: true,
+                filterQuality: FilterQuality.medium,
+                debugLabel: 'chat-image',
               ),
               if (pending)
                 const ColoredBox(
                   color: Color(0x66000000),
-                  child: SizedBox(
-                    width: 220,
-                    height: 220,
-                    child: Center(
-                      child: SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   ),
                 ),
@@ -1385,7 +1714,7 @@ class _VoicePlayerState extends State<_VoicePlayer> {
         : (_position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
 
     return SizedBox(
-      width: 180,
+      width: AppLayout.chatVoiceWidth(context),
       child: Row(
         children: [
           InkWell(

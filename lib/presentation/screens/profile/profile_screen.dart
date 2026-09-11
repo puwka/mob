@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../data/repositories/profile_photo_repository.dart';
@@ -19,9 +20,11 @@ import '../../../services/level_service.dart';
 import '../../../widgets/achievement_card.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/app_network_image.dart';
+import '../../../widgets/app_page_body.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/level_progress_bar.dart';
 import '../../../widgets/level_up_overlay.dart';
+import '../../../widgets/photo_lightbox.dart';
 import '../../../widgets/role_badge.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -67,7 +70,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        leadingWidth: 88,
+        leadingWidth: AppLayout.isCompact(context) ? 72 : 88,
         leading: TextButton(
           onPressed: () {
             ref.read(rankingEntityTabProvider.notifier).state =
@@ -81,9 +84,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             foregroundColor: AppColors.accent,
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-          child: const Text(
-            'Рейтинг',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: const Text(
+              'Рейтинг',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+            ),
           ),
         ),
         title: const Text('Боевой паспорт'),
@@ -100,7 +106,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 Icon(Icons.groups_outlined, size: 16),
                 SizedBox(width: 4),
                 Text(
-                  'dating',
+                  'Дейтинг',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
                 ),
               ],
@@ -148,12 +154,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ref.read(achievementsProvider.notifier).refresh(),
                   ]);
                 },
-                child: _PassportBody(
-                  profile: profile,
-                  level: level,
-                  eventsCount: eventsCount,
-                  achievements: achievementsAsync,
-                  achievementService: achievementService,
+                child: AppPageBody(
+                  child: _PassportBody(
+                    profile: profile,
+                    level: level,
+                    eventsCount: eventsCount,
+                    achievements: achievementsAsync,
+                    achievementService: achievementService,
+                  ),
                 ),
               );
             },
@@ -214,7 +222,7 @@ class _PassportBody extends ConsumerWidget {
     final photos = ref.watch(myProfilePhotosProvider).valueOrNull ?? const [];
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+      padding: AppLayout.pagePadding(context),
       children: [
         _HeaderBlock(profile: profile, level: level),
         const SizedBox(height: 12),
@@ -419,21 +427,26 @@ class _PassportBody extends ConsumerWidget {
                           if (index > 0) const SizedBox(width: gap),
                           Expanded(
                             child: index < photos.length
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Image.network(
-                                      photos[index].url,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Container(
-                                        color: AppColors.surfaceElevated,
-                                        child: const Icon(
-                                          Icons.image_outlined,
-                                          color: AppColors.textTertiary,
-                                          size: 18,
+                                ? Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: () => showPhotoLightbox(
+                                        context,
+                                        urls: [
+                                          for (final p in photos) p.url,
+                                        ],
+                                        initialIndex: index,
+                                      ),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: AppNetworkImage(
+                                          url: photos[index].url,
+                                          fit: BoxFit.cover,
+                                          memCacheWidth: 320,
+                                          showSpinner: true,
+                                          debugLabel: 'profile-photo',
+                                          placeholderIcon: Icons.image_outlined,
                                         ),
                                       ),
                                     ),
@@ -498,22 +511,15 @@ class _HeaderBlock extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Позывной: ${profile.nickname}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(fontSize: 18),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ProfileNameBadges(badgeRole: profile.badgeRole),
-                      ],
+                    ProfileNameBadges(badgeRole: profile.badgeRole),
+                    Text(
+                      profile.nickname,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontSize: 18),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Row(

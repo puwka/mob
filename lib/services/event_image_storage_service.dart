@@ -23,7 +23,7 @@ class EventImageStorageService {
       final normalized = await normalizeEventCoverBytes(bytes);
       final compressed = await FlutterImageCompress.compressWithList(
         normalized,
-        quality: 82,
+        quality: 90,
         format: CompressFormat.jpeg,
       );
       final data =
@@ -35,7 +35,7 @@ class EventImageStorageService {
             fileOptions: const FileOptions(
               upsert: true,
               contentType: 'image/jpeg',
-              cacheControl: '3600',
+              cacheControl: '604800',
             ),
           );
       final url = _client.storage.from(bucket).getPublicUrl(path);

@@ -1,4 +1,5 @@
 import 'clan.dart';
+import '../../core/utils/date_time_parse.dart';
 
 enum ConversationType {
   market,
@@ -17,7 +18,7 @@ enum ConversationType {
 
   String get folderLabel => switch (this) {
         ConversationType.market => 'Барахолка',
-        ConversationType.dating => 'Знакомства',
+        ConversationType.dating => 'Дейтинг',
         ConversationType.clan => 'Клан',
         ConversationType.user => 'Личные',
         ConversationType.city => 'Город',
@@ -59,9 +60,10 @@ class ChatMuteInfo {
       conversationId: '${json['conversation_id']}',
       mutedUntil: json['muted_until'] == null
           ? null
-          : DateTime.tryParse('${json['muted_until']}'),
+          : tryParseSupabaseDateTime(json['muted_until']),
       reason: json['reason'] as String?,
-      createdAt: DateTime.tryParse('${json['created_at']}') ?? DateTime.now(),
+      createdAt:
+          tryParseSupabaseDateTime(json['created_at']) ?? DateTime.now().toUtc(),
     );
   }
 }
@@ -79,6 +81,9 @@ class ChatMessage {
     this.audioUrl,
     this.audioDurationMs,
     this.imageUrl,
+    this.imageUrls = const [],
+    this.replyToMessageId,
+    this.replyTo,
     this.senderNickname,
     this.senderAvatarUrl,
     this.senderClanRole,
@@ -97,6 +102,9 @@ class ChatMessage {
   final String? audioUrl;
   final int? audioDurationMs;
   final String? imageUrl;
+  final List<String> imageUrls;
+  final String? replyToMessageId;
+  final ChatReplyPreview? replyTo;
   final String? senderNickname;
   final String? senderAvatarUrl;
   final ClanRole? senderClanRole;
@@ -107,6 +115,18 @@ class ChatMessage {
   bool get isVoice => messageType == ChatMessageType.voice;
   bool get isImage => messageType == ChatMessageType.image;
 
+  /// Prefer album column; fall back to legacy single `image_url`.
+  List<String> get resolvedImageUrls {
+    final fromAlbum = [
+      for (final u in imageUrls)
+        if (u.trim().isNotEmpty) u.trim(),
+    ];
+    if (fromAlbum.isNotEmpty) return fromAlbum;
+    final single = imageUrl?.trim();
+    if (single != null && single.isNotEmpty) return [single];
+    return const [];
+  }
+
   String get displaySenderName {
     final n = senderNickname?.trim();
     if (n != null && n.isNotEmpty) return n;
@@ -116,7 +136,11 @@ class ChatMessage {
   String get previewText {
     if (isDeleted) return 'Сообщение удалено';
     if (isVoice) return 'Голосовое сообщение';
-    if (isImage) return 'Фото';
+    if (isImage) {
+      final n = resolvedImageUrls.length;
+      if (n > 1) return '$n фото';
+      return 'Фото';
+    }
     return text;
   }
 
@@ -131,8 +155,12 @@ class ChatMessage {
     String? audioUrl,
     int? audioDurationMs,
     String? imageUrl,
+    List<String>? imageUrls,
     ChatMessageType? messageType,
     String? text,
+    String? replyToMessageId,
+    ChatReplyPreview? replyTo,
+    bool clearReplyTo = false,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -146,6 +174,9 @@ class ChatMessage {
       audioUrl: audioUrl ?? this.audioUrl,
       audioDurationMs: audioDurationMs ?? this.audioDurationMs,
       imageUrl: imageUrl ?? this.imageUrl,
+      imageUrls: imageUrls ?? this.imageUrls,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
+      replyTo: clearReplyTo ? null : (replyTo ?? this.replyTo),
       senderNickname: senderNickname ?? this.senderNickname,
       senderAvatarUrl: senderAvatarUrl ?? this.senderAvatarUrl,
       senderClanRole: clearSenderClanRole
@@ -173,27 +204,130 @@ class ChatMessage {
       clanRole = ClanRole.fromString(roleRaw);
     }
 
+    ChatReplyPreview? reply;
+    final replyRaw = json['reply_to'];
+    if (replyRaw is Map) {
+      reply = ChatReplyPreview.fromJson(Map<String, dynamic>.from(replyRaw));
+    }
+
+    final urls = <String>[];
+    final rawUrls = json['image_urls'];
+    if (rawUrls is List) {
+      for (final item in rawUrls) {
+        final s = item?.toString().trim();
+        if (s != null && s.isNotEmpty) urls.add(s);
+      }
+    }
+
     return ChatMessage(
       id: json['id'] as String,
       conversationId: json['conversation_id'] as String,
       senderId: json['sender_id'] as String,
       text: json['text'] as String? ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: parseSupabaseDateTime(json['created_at']),
       editedAt: json['edited_at'] == null
           ? null
-          : DateTime.parse(json['edited_at'] as String),
+          : parseSupabaseDateTime(json['edited_at']),
       deletedAt: json['deleted_at'] == null
           ? null
-          : DateTime.parse(json['deleted_at'] as String),
+          : parseSupabaseDateTime(json['deleted_at']),
       messageType: ChatMessageType.fromString(
         json['message_type'] as String? ?? 'text',
       ),
       audioUrl: json['audio_url'] as String?,
       audioDurationMs: (json['audio_duration_ms'] as num?)?.toInt(),
       imageUrl: json['image_url'] as String?,
+      imageUrls: urls,
+      replyToMessageId: json['reply_to_message_id'] as String?,
+      replyTo: reply,
       senderNickname: nick,
       senderAvatarUrl: avatar,
       senderClanRole: clanRole,
+    );
+  }
+}
+
+class ChatReplyPreview {
+  const ChatReplyPreview({
+    required this.id,
+    required this.senderId,
+    required this.text,
+    required this.messageType,
+    this.deletedAt,
+    this.senderNickname,
+    this.imageCount = 1,
+  });
+
+  final String id;
+  final String senderId;
+  final String text;
+  final ChatMessageType messageType;
+  final DateTime? deletedAt;
+  final String? senderNickname;
+  final int imageCount;
+
+  bool get isDeleted => deletedAt != null;
+
+  String get displaySenderName {
+    final n = senderNickname?.trim();
+    if (n != null && n.isNotEmpty) return n;
+    return 'Игрок';
+  }
+
+  String get previewText {
+    if (isDeleted) return 'Сообщение удалено';
+    if (messageType == ChatMessageType.voice) return 'Голосовое сообщение';
+    if (messageType == ChatMessageType.image) {
+      if (imageCount > 1) return '$imageCount фото';
+      return 'Фото';
+    }
+    final t = text.trim();
+    if (t.isEmpty) return 'Сообщение';
+    return t;
+  }
+
+  factory ChatReplyPreview.fromJson(Map<String, dynamic> json) {
+    String? nick;
+    final sender = json['sender'];
+    if (sender is Map) {
+      nick = sender['nickname'] as String?;
+    }
+    nick ??= json['sender_nickname'] as String?;
+
+    var imageCount = 1;
+    final rawUrls = json['image_urls'];
+    if (rawUrls is List) {
+      final n = rawUrls.where((e) => e?.toString().trim().isNotEmpty == true).length;
+      if (n > 0) imageCount = n;
+    } else if (json['image_count'] is num) {
+      imageCount = (json['image_count'] as num).toInt().clamp(1, 10);
+    }
+
+    return ChatReplyPreview(
+      id: json['id'] as String,
+      senderId: json['sender_id'] as String? ?? '',
+      text: json['text'] as String? ?? '',
+      messageType: ChatMessageType.fromString(
+        json['message_type'] as String? ?? 'text',
+      ),
+      deletedAt: json['deleted_at'] == null
+          ? null
+          : tryParseSupabaseDateTime(json['deleted_at']),
+      senderNickname: nick,
+      imageCount: imageCount,
+    );
+  }
+
+  factory ChatReplyPreview.fromMessage(ChatMessage message) {
+    final n = message.resolvedImageUrls.length;
+    return ChatReplyPreview(
+      id: message.id,
+      senderId: message.senderId,
+      text: message.text,
+      messageType: message.messageType,
+      deletedAt: message.deletedAt,
+      senderNickname: message.senderNickname,
+      imageCount: n > 0 ? n : 1,
     );
   }
 }

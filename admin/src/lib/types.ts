@@ -37,6 +37,7 @@ export type AdminUserRow = {
   avatar_url: string | null;
   role: AppRole;
   rating: number;
+  bonus_xp?: number;
   status: UserStatus;
   created_at: string;
   clan_id: string | null;

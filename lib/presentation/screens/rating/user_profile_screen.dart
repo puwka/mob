@@ -17,8 +17,10 @@ import '../../../services/level_service.dart';
 import '../../../widgets/achievement_card.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/level_progress_bar.dart';
+import '../../../widgets/photo_lightbox.dart';
 import '../../../widgets/presence_status.dart';
 import '../../../widgets/role_badge.dart';
 
@@ -215,20 +217,26 @@ class UserProfileScreen extends ConsumerWidget {
                                 for (var i = 0; i < count; i++) ...[
                                   if (i > 0) const SizedBox(width: gap),
                                   Expanded(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Image.network(
-                                        photos[i].url,
-                                        fit: BoxFit.cover,
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                Container(
-                                          color: AppColors.surfaceElevated,
-                                          child: const Icon(
-                                            Icons.image_outlined,
-                                            color: AppColors.textTertiary,
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: () => showPhotoLightbox(
+                                          context,
+                                          urls: [
+                                            for (final p in photos) p.url,
+                                          ],
+                                          initialIndex: i,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          child: AppNetworkImage(
+                                            url: photos[i].url,
+                                            fit: BoxFit.cover,
+                                            memCacheWidth: 320,
+                                            showSpinner: true,
+                                            debugLabel: 'user-photo',
                                           ),
                                         ),
                                       ),
@@ -303,22 +311,15 @@ class _PublicHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            profile.nickname,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(fontSize: 18),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ProfileNameBadges(badgeRole: profile.badgeRole),
-                      ],
+                    ProfileNameBadges(badgeRole: profile.badgeRole),
+                    Text(
+                      profile.nickname,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontSize: 18),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     PresenceStatusText(
@@ -415,19 +416,14 @@ class _Avatar extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: url != null && url!.isNotEmpty
-          ? Image.network(
-              url!,
+          ? AppNetworkImage(
+              url: url,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Center(
-                child: Text(
-                  letter,
-                  style: const TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              width: 88,
+              height: 88,
+              memCacheWidth: 200,
+              showSpinner: false,
+              debugLabel: 'user-avatar',
             )
           : Center(
               child: Text(

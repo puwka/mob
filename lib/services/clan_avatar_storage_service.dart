@@ -21,9 +21,9 @@ class ClanAvatarStorageService {
     try {
       final compressed = await FlutterImageCompress.compressWithList(
         bytes,
-        minWidth: 512,
-        minHeight: 512,
-        quality: 80,
+        minWidth: 1024,
+        minHeight: 1024,
+        quality: 88,
         format: CompressFormat.jpeg,
       );
       final data = compressed.isEmpty ? bytes : Uint8List.fromList(compressed);
@@ -34,7 +34,7 @@ class ClanAvatarStorageService {
             fileOptions: const FileOptions(
               upsert: true,
               contentType: 'image/jpeg',
-              cacheControl: '3600',
+              cacheControl: '604800',
             ),
           );
       final url = _client.storage.from(bucket).getPublicUrl(path);

@@ -16,6 +16,14 @@ migrate_working_dir/
 .env
 .env.local
 
+# Android signing (never commit)
+**/android/key.properties
+**/android/*.jks
+**/android/*.keystore
+**/android/*.p12
+**/android/upload-keystore.jks
+**/android/upload-keystore.p12
+
 # IntelliJ related
 *.iml
 *.ipr
@@ -47,3 +55,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# JVM heap dumps (can be hundreds of MB)
+*.hprof
+android/java_pid*.hprof
+
+# Supabase CLI local cache
+supabase/.temp/

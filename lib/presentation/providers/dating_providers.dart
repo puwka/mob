@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/app_exception.dart';
 import '../../domain/models/conversation.dart';
@@ -77,7 +76,6 @@ class DatingFeedNotifier extends AsyncNotifier<List<DatingCandidate>> {
 
       if (result.matched || result.action == DatingActionType.like) {
         ref.invalidate(datingMatchesProvider);
-        ref.invalidate(pendingDatingNotificationsProvider);
         if (result.matched) {
           ref.invalidate(conversationsByTypeProvider(ConversationType.dating));
           unawaited(
@@ -139,71 +137,5 @@ class DatingMatchesNotifier extends AsyncNotifier<List<DatingMatch>> {
       if (uid == null) return const <DatingMatch>[];
       return ref.read(datingRepositoryProvider).fetchMyMatches();
     });
-  }
-}
-
-final pendingDatingNotificationsProvider = AsyncNotifierProvider<
-    PendingDatingNotificationsNotifier, List<DatingNotification>>(
-  PendingDatingNotificationsNotifier.new,
-);
-
-/// Alias kept for older call sites.
-final pendingDatingMatchNotificationsProvider =
-    pendingDatingNotificationsProvider;
-
-class PendingDatingNotificationsNotifier
-    extends AsyncNotifier<List<DatingNotification>> {
-  RealtimeChannel? _channel;
-
-  @override
-  Future<List<DatingNotification>> build() async {
-    ref.watch(authStateProvider);
-    final client = ref.watch(supabaseClientProvider);
-    final uid = client.auth.currentUser?.id;
-    if (uid == null) return const [];
-
-    ref.onDispose(() {
-      final ch = _channel;
-      _channel = null;
-      if (ch != null) unawaited(client.removeChannel(ch));
-    });
-
-    _channel?.unsubscribe();
-    _channel = client
-        .channel('dating-notifications-$uid')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'dating_notifications',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: uid,
-          ),
-          callback: (_) {
-            unawaited(refresh(silent: true));
-          },
-        )
-        .subscribe();
-
-    return ref.read(datingRepositoryProvider).fetchPendingNotifications();
-  }
-
-  Future<void> refresh({bool silent = false}) async {
-    if (!silent) state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final uid = ref.read(supabaseClientProvider).auth.currentUser?.id;
-      if (uid == null) return const <DatingNotification>[];
-      return ref.read(datingRepositoryProvider).fetchPendingNotifications();
-    });
-  }
-
-  Future<void> markSeen(String notificationId) async {
-    await ref.read(datingRepositoryProvider).markNotificationSeen(notificationId);
-    final current = state.valueOrNull ?? const <DatingNotification>[];
-    state = AsyncData([
-      for (final n in current)
-        if (n.notificationId != notificationId) n,
-    ]);
   }
 }

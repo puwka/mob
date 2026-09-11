@@ -14,6 +14,7 @@ import '../../../presentation/providers/repository_providers.dart';
 import '../../../presentation/screens/map/place_map_screen.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/feedback.dart';
 
 class OrganizerEventDetailsScreen extends ConsumerStatefulWidget {
@@ -133,12 +134,23 @@ class _OrganizerEventDetailsScreenState
       appBar: AppBar(
         title: const Text('Мероприятие'),
         actions: [
-          if (async.hasValue)
+          if (async.hasValue) ...[
+            IconButton(
+              tooltip: 'Изменить',
+              onPressed: _deleting || _finishing
+                  ? null
+                  : () => context.push(
+                        '/main/profile/organizer/events/${widget.eventId}/edit',
+                      ),
+              icon: const Icon(Icons.edit_outlined),
+            ),
             IconButton(
               tooltip: 'Удалить',
-              onPressed: _deleting ? null : () => _deleteEvent(async.requireValue),
+              onPressed:
+                  _deleting ? null : () => _deleteEvent(async.requireValue),
               icon: const Icon(Icons.delete_outline, color: AppColors.danger),
             ),
+          ],
         ],
       ),
       body: async.when(
@@ -164,7 +176,12 @@ class _OrganizerEventDetailsScreenState
                   borderRadius: BorderRadius.circular(AppRadii.card),
                   child: AspectRatio(
                     aspectRatio: 16 / 9,
-                    child: Image.network(event.imageUrl!, fit: BoxFit.cover),
+                    child: AppNetworkImage(
+                      url: event.imageUrl,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 900,
+                      debugLabel: 'org-event',
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -265,6 +282,17 @@ class _OrganizerEventDetailsScreenState
                 ),
               ],
               const SizedBox(height: 16),
+              AppButton(
+                label: 'Изменить',
+                icon: Icons.edit_outlined,
+                variant: AppButtonVariant.secondary,
+                onPressed: _deleting || _finishing
+                    ? null
+                    : () => context.push(
+                          '/main/profile/organizer/events/$eventId/edit',
+                        ),
+              ),
+              const SizedBox(height: 8),
               AppButton(
                 label: 'Участники',
                 variant: AppButtonVariant.secondary,

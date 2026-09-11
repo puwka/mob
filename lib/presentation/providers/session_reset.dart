@@ -27,7 +27,6 @@ void resetUserScopedProviders(Ref ref) {
   ref.invalidate(chatMessagesProvider);
   ref.invalidate(datingFeedProvider);
   ref.invalidate(datingMatchesProvider);
-  ref.invalidate(pendingDatingNotificationsProvider);
   ref.invalidate(myPolygonsProvider);
   ref.invalidate(userEventsCountProvider);
   ref.invalidate(achievementsProvider);

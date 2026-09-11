@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/presence.dart';
@@ -11,6 +12,7 @@ import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/clan_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
+import '../../../widgets/app_page_body.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/presence_status.dart';
 
@@ -36,7 +38,12 @@ class DialogsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              padding: EdgeInsets.fromLTRB(
+                AppLayout.pageGutter(context),
+                10,
+                AppLayout.pageGutter(context),
+                8,
+              ),
               child: Text(
                 'Диалоги',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -45,7 +52,8 @@ class DialogsScreen extends ConsumerWidget {
               ),
             ),
             Expanded(
-              child: personalAsync.when(
+              child: AppPageBody(
+                child: personalAsync.when(
                 loading: () => const Center(
                   child: SizedBox(
                     width: 28,
@@ -92,7 +100,7 @@ class DialogsScreen extends ConsumerWidget {
                     },
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      padding: AppLayout.pagePadding(context, bottom: 16),
                       children: [
                         _FolderTile(
                           title: ConversationType.market.folderLabel,
@@ -184,6 +192,7 @@ class DialogsScreen extends ConsumerWidget {
                   );
                 },
               ),
+              ),
             ),
           ],
         ),
@@ -234,7 +243,8 @@ class ChatFolderScreen extends ConsumerWidget {
           onPressed: () => context.go('/main/chats'),
         ),
       ),
-      body: async.when(
+      body: AppPageBody(
+        child: async.when(
         loading: () => const Center(
           child: SizedBox(
             width: 28,
@@ -253,7 +263,7 @@ class ChatFolderScreen extends ConsumerWidget {
           if (items.isEmpty) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(AppLayout.pageGutter(context)),
               children: [
                 const SizedBox(height: 40),
                 EmptyStateCard(
@@ -261,7 +271,7 @@ class ChatFolderScreen extends ConsumerWidget {
                   subtitle: type == ConversationType.market
                       ? 'Нажмите «Написать» на объявлении.'
                       : type == ConversationType.dating
-                          ? 'Совпадения из Знакомств появятся здесь.'
+                          ? 'Совпадения из дейтинга появятся здесь.'
                           : type == ConversationType.city
                               ? 'Укажите город в профиле — чат откроется автоматически.'
                               : type == ConversationType.event
@@ -279,7 +289,7 @@ class ChatFolderScreen extends ConsumerWidget {
                 ref.read(conversationsByTypeProvider(type).notifier).refresh(),
             child: ListView.separated(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              padding: AppLayout.pagePadding(context, bottom: 16),
               itemCount: items.length,
               separatorBuilder: (context, index) => const SizedBox(height: 6),
               itemBuilder: (context, index) {
@@ -303,6 +313,7 @@ class ChatFolderScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
       ),
     );
   }

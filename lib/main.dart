@@ -10,6 +10,8 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/providers/presence_providers.dart';
+import 'services/mapkit_bootstrap.dart';
+import 'services/push_notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +33,10 @@ Future<void> main() async {
   await dotenv.load(fileName: '.env');
   await initializeDateFormatting('ru');
 
+  await initMapkitIfNeeded(
+    dotenv.env['YANDEX_MAPKIT_API_KEY']?.trim() ?? '',
+  );
+
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
@@ -39,14 +45,29 @@ Future<void> main() async {
     ),
   );
 
+  await PushNotificationService.instance.init();
+
   runApp(const ProviderScope(child: TacticalApp()));
 }
 
-class TacticalApp extends ConsumerWidget {
+class TacticalApp extends ConsumerStatefulWidget {
   const TacticalApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TacticalApp> createState() => _TacticalAppState();
+}
+
+class _TacticalAppState extends ConsumerState<TacticalApp> {
+  @override
+  void initState() {
+    super.initState();
+    PushNotificationService.instance.onOpenLocation = (location) {
+      ref.read(goRouterProvider).go(location);
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(goRouterProvider);
 
     return MaterialApp.router(
@@ -54,9 +75,16 @@ class TacticalApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       routerConfig: router,
-      builder: (context, child) => PresenceLifecycle(
-        child: child ?? const SizedBox.shrink(),
-      ),
+      builder: (context, child) {
+        final content = PresenceLifecycle(
+          child: child ?? const SizedBox.shrink(),
+        );
+        return MediaQuery.withClampedTextScaling(
+          minScaleFactor: 0.9,
+          maxScaleFactor: 1.25,
+          child: content,
+        );
+      },
     );
   }
 }

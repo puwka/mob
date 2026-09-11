@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/app_exception.dart';
+import '../../core/utils/date_time_parse.dart';
 import '../../core/utils/error_mapper.dart';
 import '../../core/utils/perf_log.dart';
 import '../../domain/models/clan.dart';
@@ -40,7 +41,7 @@ class ChatRepository {
         convIds.add(id);
         lastRead[id] = map['last_read_at'] == null
             ? null
-            : DateTime.parse(map['last_read_at'] as String);
+            : parseSupabaseDateTime(map['last_read_at']);
       }
 
       final convRows = await _client
@@ -105,21 +106,28 @@ class ChatRepository {
       try {
         final last = await _client
             .from('messages')
-            .select('text, created_at, deleted_at, message_type')
+            .select('text, created_at, deleted_at, message_type, image_urls')
             .eq('conversation_id', id)
             .order('created_at', ascending: false)
             .limit(1)
             .maybeSingle()
             .timeout(const Duration(seconds: 8));
         if (last == null) return (text: null as String?, at: null as DateTime?);
-        final lastAt = DateTime.parse(last['created_at'] as String);
+        final lastAt = parseSupabaseDateTime(last['created_at']);
         late final String? lastText;
         if (last['deleted_at'] != null) {
           lastText = 'Сообщение удалено';
         } else if ((last['message_type'] as String?) == 'voice') {
           lastText = 'Голосовое сообщение';
         } else if ((last['message_type'] as String?) == 'image') {
-          lastText = 'Фото';
+          final rawUrls = last['image_urls'];
+          var n = 0;
+          if (rawUrls is List) {
+            n = rawUrls
+                .where((e) => e?.toString().trim().isNotEmpty == true)
+                .length;
+          }
+          lastText = n > 1 ? '$n фото' : 'Фото';
         } else {
           lastText = last['text'] as String?;
         }
@@ -182,7 +190,7 @@ class ChatRepository {
             .timeout(const Duration(seconds: 8));
         DateTime? peerLastSeen;
         final seen = profile?['last_seen_at'] as String?;
-        if (seen != null) peerLastSeen = DateTime.parse(seen);
+        if (seen != null) peerLastSeen = parseSupabaseDateTime(seen);
         return (
           id: peerId,
           nick: profile?['nickname'] as String?,
@@ -256,8 +264,8 @@ class ChatRepository {
       listingId: listingId,
       clanId: c['clan_id'] as String?,
       clanChannel: channel,
-      createdAt: DateTime.parse(c['created_at'] as String),
-      updatedAt: DateTime.parse(c['updated_at'] as String),
+      createdAt: parseSupabaseDateTime(c['created_at']),
+      updatedAt: parseSupabaseDateTime(c['updated_at']),
       lastMessageText: last.text,
       lastMessageAt: last.at,
       unreadCount: unread,
@@ -318,7 +326,7 @@ class ChatRepository {
               peerNick = profile?['nickname'] as String?;
               peerAvatar = profile?['avatar_url'] as String?;
               final seen = profile?['last_seen_at'] as String?;
-              if (seen != null) peerLastSeen = DateTime.parse(seen);
+              if (seen != null) peerLastSeen = parseSupabaseDateTime(seen);
             }
           }
         } catch (_) {}
@@ -354,8 +362,8 @@ class ChatRepository {
         listingId: listingId,
         clanId: c['clan_id'] as String?,
         clanChannel: channel,
-        createdAt: DateTime.parse(c['created_at'] as String),
-        updatedAt: DateTime.parse(c['updated_at'] as String),
+        createdAt: parseSupabaseDateTime(c['created_at']),
+        updatedAt: parseSupabaseDateTime(c['updated_at']),
         listingTitle: listingTitle,
         listingPrice: listingPrice,
         listingCoverUrl: listingCover,
@@ -379,7 +387,7 @@ class ChatRepository {
           .from('messages')
           .select(
             'id, conversation_id, sender_id, text, created_at, edited_at, deleted_at, '
-            'message_type, audio_url, audio_duration_ms, image_url, '
+            'message_type, audio_url, audio_duration_ms, image_url, image_urls, reply_to_message_id, '
             'sender:profiles!messages_sender_id_fkey(nickname, avatar_url)',
           )
           .eq('conversation_id', conversationId);
@@ -400,6 +408,7 @@ class ChatRepository {
           .toList();
 
       list = await _enrichSenders(list);
+      list = await _enrichReplies(list);
       list = await _enrichClanRoles(conversationId, list);
       return list;
     } catch (e) {
@@ -409,7 +418,7 @@ class ChatRepository {
             .from('messages')
             .select(
               'id, conversation_id, sender_id, text, created_at, edited_at, deleted_at, '
-              'message_type, audio_url, audio_duration_ms, image_url',
+              'message_type, audio_url, audio_duration_ms, image_url, image_urls, reply_to_message_id',
             )
             .eq('conversation_id', conversationId);
         if (before != null) {
@@ -427,6 +436,7 @@ class ChatRepository {
             .reversed
             .toList();
         list = await _enrichSenders(list);
+        list = await _enrichReplies(list);
         return _enrichClanRoles(conversationId, list);
       } catch (e2) {
         throw AppException(ErrorMapper.map(e2));
@@ -442,12 +452,93 @@ class ChatRepository {
       final list = await _enrichSenders([message]);
       enriched = list.isEmpty ? message : list.first;
     }
+    if (enriched.replyToMessageId != null && enriched.replyTo == null) {
+      final withReplies = await _enrichReplies([enriched]);
+      enriched = withReplies.isEmpty ? enriched : withReplies.first;
+    }
     if (enriched.senderClanRole == null) {
       final withRoles =
           await _enrichClanRoles(message.conversationId, [enriched]);
       enriched = withRoles.isEmpty ? enriched : withRoles.first;
     }
     return enriched;
+  }
+
+  Future<List<ChatMessage>> _enrichReplies(List<ChatMessage> messages) async {
+    final needIds = <String>{};
+    for (final m in messages) {
+      if (m.replyToMessageId != null && m.replyTo == null) {
+        needIds.add(m.replyToMessageId!);
+      }
+    }
+    if (needIds.isEmpty) return messages;
+
+    try {
+      final rows = await _client
+          .from('messages')
+          .select(
+            'id, sender_id, text, message_type, deleted_at, image_urls, '
+            'sender:profiles!messages_sender_id_fkey(nickname)',
+          )
+          .inFilter('id', needIds.toList())
+          .timeout(const Duration(seconds: 10));
+      final byId = <String, ChatReplyPreview>{};
+      for (final raw in rows as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        final preview = ChatReplyPreview.fromJson(map);
+        byId[preview.id] = preview;
+      }
+      // Fallback without embed
+      if (byId.isEmpty) {
+        final plain = await _client
+            .from('messages')
+            .select('id, sender_id, text, message_type, deleted_at, image_urls')
+            .inFilter('id', needIds.toList())
+            .timeout(const Duration(seconds: 10));
+        for (final raw in plain as List) {
+          final map = Map<String, dynamic>.from(raw as Map);
+          final preview = ChatReplyPreview.fromJson(map);
+          byId[preview.id] = preview;
+        }
+        final senderIds = byId.values.map((e) => e.senderId).toSet().toList();
+        if (senderIds.isNotEmpty) {
+          final profiles = await _client
+              .from('profiles')
+              .select('id, nickname')
+              .inFilter('id', senderIds)
+              .timeout(const Duration(seconds: 10));
+          final nickById = <String, String>{};
+          for (final raw in profiles as List) {
+            final map = Map<String, dynamic>.from(raw as Map);
+            nickById[map['id'] as String] = map['nickname'] as String? ?? '';
+          }
+          for (final id in byId.keys.toList()) {
+            final p = byId[id]!;
+            final nick = nickById[p.senderId];
+            if (nick != null && nick.isNotEmpty) {
+              byId[id] = ChatReplyPreview(
+                id: p.id,
+                senderId: p.senderId,
+                text: p.text,
+                messageType: p.messageType,
+                deletedAt: p.deletedAt,
+                senderNickname: nick,
+                imageCount: p.imageCount,
+              );
+            }
+          }
+        }
+      }
+      return [
+        for (final m in messages)
+          if (m.replyToMessageId != null && byId.containsKey(m.replyToMessageId))
+            m.copyWith(replyTo: byId[m.replyToMessageId!])
+          else
+            m,
+      ];
+    } catch (_) {
+      return messages;
+    }
   }
 
   Future<List<ChatMessage>> _enrichSenders(List<ChatMessage> messages) async {
@@ -736,6 +827,7 @@ class ChatRepository {
   Future<ChatMessage> sendMessage({
     required String conversationId,
     required String text,
+    String? replyToMessageId,
   }) async {
     try {
       final row = await _client.rpc(
@@ -744,6 +836,8 @@ class ChatRepository {
           'p_conversation_id': conversationId,
           'p_text': text,
           'p_message_type': 'text',
+          if (replyToMessageId != null)
+            'p_reply_to_message_id': replyToMessageId,
         },
       );
       return ChatMessage.fromJson(Map<String, dynamic>.from(row as Map));
@@ -756,6 +850,7 @@ class ChatRepository {
     required String conversationId,
     required String audioUrl,
     required int durationMs,
+    String? replyToMessageId,
   }) async {
     try {
       final row = await _client.rpc(
@@ -766,6 +861,8 @@ class ChatRepository {
           'p_message_type': 'voice',
           'p_audio_url': audioUrl,
           'p_audio_duration_ms': durationMs,
+          if (replyToMessageId != null)
+            'p_reply_to_message_id': replyToMessageId,
         },
       );
       return ChatMessage.fromJson(Map<String, dynamic>.from(row as Map));
@@ -776,16 +873,27 @@ class ChatRepository {
 
   Future<ChatMessage> sendImageMessage({
     required String conversationId,
-    required String imageUrl,
+    required List<String> imageUrls,
+    String? replyToMessageId,
   }) async {
     try {
+      final urls = [
+        for (final u in imageUrls)
+          if (u.trim().isNotEmpty) u.trim(),
+      ].take(10).toList();
+      if (urls.isEmpty) {
+        throw const AppException('Пустое изображение');
+      }
       final row = await _client.rpc(
         'send_chat_message',
         params: {
           'p_conversation_id': conversationId,
           'p_text': null,
           'p_message_type': 'image',
-          'p_image_url': imageUrl,
+          'p_image_url': urls.first,
+          'p_image_urls': urls,
+          if (replyToMessageId != null)
+            'p_reply_to_message_id': replyToMessageId,
         },
       );
       return ChatMessage.fromJson(Map<String, dynamic>.from(row as Map));
@@ -892,6 +1000,9 @@ class ChatRepository {
     }
     if (raw.contains('EMPTY_IMAGE')) {
       return 'Не удалось отправить изображение';
+    }
+    if (raw.contains('TOO_MANY_IMAGES')) {
+      return 'Максимум 10 фото за сообщение';
     }
     if (raw.contains('CANNOT_HIDE_CONVERSATION')) {
       return 'Этот чат нельзя удалить';

@@ -52,6 +52,21 @@ void main() {
       );
     });
 
+    test('admin rating raises level via calculateFromProfile', () {
+      final profile = Profile(
+        id: 'u1',
+        phone: '+79001112233',
+        nickname: 'Voron',
+        city: 'Москва',
+        rating: 500,
+        bonusXp: 500,
+        createdAt: DateTime.utc(2026, 1, 1),
+      );
+      final level = service.calculateFromProfile(profile, eventsCount: 0);
+      expect(level.currentXp, 500);
+      expect(level.currentLevel, 3);
+    });
+
     test('calculateLevel starts at 1 with 0 XP', () {
       final level = service.calculateLevel(0);
       expect(level.currentLevel, 1);

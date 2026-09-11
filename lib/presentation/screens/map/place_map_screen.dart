@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/app_exception.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../services/map_launcher.dart';
 import '../../../widgets/app_button.dart';
+import '../../../widgets/yandex_map_view.dart';
 
-/// Read-only in-app OSM map with a pin.
+/// Read-only in-app Yandex map with a pin.
 class PlaceMapScreen extends StatelessWidget {
   const PlaceMapScreen({
     super.key,
@@ -25,7 +24,6 @@ class PlaceMapScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pin = LatLng(latitude, longitude);
     final address = subtitle?.trim();
 
     return Scaffold(
@@ -33,31 +31,10 @@ class PlaceMapScreen extends StatelessWidget {
       appBar: AppBar(title: Text(title)),
       body: Stack(
         children: [
-          FlutterMap(
-            options: MapOptions(
-              initialCenter: pin,
-              initialZoom: 15,
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.moystraykbol.app',
-              ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: pin,
-                    width: 48,
-                    height: 48,
-                    child: const Icon(
-                      Icons.location_on,
-                      color: AppColors.accent,
-                      size: 44,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          YandexMapView(
+            latitude: latitude,
+            longitude: longitude,
+            zoom: 15,
           ),
           if (address != null && address.isNotEmpty)
             Positioned(
@@ -97,7 +74,7 @@ class PlaceMapScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         AppButton(
-                          label: 'Открыть во внешнем приложении',
+                          label: 'Открыть в Яндекс Картах',
                           onPressed: () async {
                             try {
                               await MapLauncher.open(

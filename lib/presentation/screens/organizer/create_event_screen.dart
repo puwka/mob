@@ -10,21 +10,27 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/event_cover.dart';
 import '../../../domain/models/conversation.dart';
+import '../../../domain/models/event.dart';
 import '../../../domain/models/polygon.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/chat_providers.dart';
+import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/organizer_events_providers.dart';
 import '../../../presentation/providers/polygon_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
+import '../../../widgets/app_network_image.dart';
 import '../../../widgets/app_text_field.dart';
 import '../../../widgets/city_picker.dart';
 import '../../../widgets/feedback.dart';
 import 'map_location_picker_screen.dart';
 
 class CreateEventScreen extends ConsumerStatefulWidget {
-  const CreateEventScreen({super.key});
+  const CreateEventScreen({super.key, this.eventId});
+
+  /// When set, form edits an existing event.
+  final String? eventId;
 
   @override
   ConsumerState<CreateEventScreen> createState() => _CreateEventScreenState();
@@ -41,18 +47,82 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   DateTime _date = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _time = const TimeOfDay(hour: 18, minute: 0);
   Uint8List? _photoBytes;
+  String? _existingImageUrl;
   PolygonVenue? _polygon;
   double? _lat;
   double? _lng;
+  EventStatus? _status;
   var _saving = false;
+  var _loadingEvent = false;
   String? _error;
+
+  bool get _isEdit => widget.eventId != null;
 
   @override
   void initState() {
     super.initState();
-    final city = ref.read(currentProfileProvider).valueOrNull?.city;
-    if (city != null && city.isNotEmpty) {
-      _city.text = city;
+    if (_isEdit) {
+      _loadingEvent = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadExisting());
+    } else {
+      final city = ref.read(currentProfileProvider).valueOrNull?.city;
+      if (city != null && city.isNotEmpty) {
+        _city.text = city;
+      }
+    }
+  }
+
+  Future<void> _loadExisting() async {
+    final id = widget.eventId;
+    if (id == null) return;
+    try {
+      final event = await ref.read(eventRepositoryProvider).fetchById(id);
+      if (!mounted) return;
+
+      PolygonVenue? polygon;
+      if (event.polygonId != null) {
+        final list = ref.read(myPolygonsProvider).valueOrNull ?? const [];
+        for (final p in list) {
+          if (p.id == event.polygonId) {
+            polygon = p;
+            break;
+          }
+        }
+        if (polygon == null) {
+          await ref.read(myPolygonsProvider.notifier).refresh();
+          final refreshed =
+              ref.read(myPolygonsProvider).valueOrNull ?? const [];
+          for (final p in refreshed) {
+            if (p.id == event.polygonId) {
+              polygon = p;
+              break;
+            }
+          }
+        }
+      }
+
+      final local = event.eventDate.toLocal();
+      setState(() {
+        _title.text = event.title;
+        _description.text = event.description;
+        _city.text = event.city;
+        _location.text = event.location;
+        _limit.text = '${event.maxParticipants}';
+        _date = DateTime(local.year, local.month, local.day);
+        _time = TimeOfDay(hour: local.hour, minute: local.minute);
+        _existingImageUrl = event.imageUrl;
+        _polygon = polygon;
+        _lat = event.latitude;
+        _lng = event.longitude;
+        _status = event.status;
+        _loadingEvent = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingEvent = false;
+        _error = ErrorMapper.map(e);
+      });
     }
   }
 
@@ -158,10 +228,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final first = _isEdit
+        ? (_date.isBefore(now) ? _date : DateTime(now.year, now.month, now.day))
+        : DateTime(now.year, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
-      firstDate: DateTime.now(),
+      initialDate: _date.isBefore(first) ? first : _date,
+      firstDate: first,
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
       builder: (context, child) {
         return Theme(
@@ -224,7 +298,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final isOrg =
         ref.read(currentProfileProvider).valueOrNull?.isOrganizer ?? false;
     if (!isOrg) {
-      setState(() => _error = 'Только организатор может создавать мероприятия');
+      setState(
+        () => _error = _isEdit
+            ? 'Только организатор может изменять мероприятия'
+            : 'Только организатор может создавать мероприятия',
+      );
       return;
     }
 
@@ -251,31 +329,71 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     try {
       final repo = ref.read(eventRepositoryProvider);
       final uid = ref.read(currentUserProvider)?.id;
-      final eventId = await repo.createEvent(
-        title: _title.text.trim(),
-        description: _description.text.trim(),
-        city: _city.text.trim(),
-        location: _location.text.trim(),
-        eventDate: eventDate,
-        maxParticipants: limit,
-        polygonId: _polygon?.id,
-        latitude: _lat,
-        longitude: _lng,
-      );
+      final eventId = widget.eventId;
 
-      if (_photoBytes != null && uid != null) {
-        final url = await ref.read(eventImageStorageServiceProvider).uploadCover(
-              organizerId: uid,
-              eventId: eventId,
-              bytes: _photoBytes!,
-            );
-        await repo.setEventImageUrl(eventId: eventId, imageUrl: url);
+      if (eventId != null) {
+        String? uploadedUrl;
+        if (_photoBytes != null && uid != null) {
+          uploadedUrl =
+              await ref.read(eventImageStorageServiceProvider).uploadCover(
+                    organizerId: uid,
+                    eventId: eventId,
+                    bytes: _photoBytes!,
+                  );
+        }
+
+        await repo.updateEvent(
+          eventId: eventId,
+          title: _title.text.trim(),
+          description: _description.text.trim(),
+          city: _city.text.trim(),
+          location: _location.text.trim(),
+          eventDate: eventDate,
+          maxParticipants: limit,
+          imageUrl: uploadedUrl,
+          status: _status,
+          polygonId: _polygon?.id,
+          latitude: _lat,
+          longitude: _lng,
+        );
+
+        ref.invalidate(eventDetailsProvider(eventId));
+        ref.invalidate(myOrganizerEventsProvider);
+        ref.invalidate(eventsListProvider);
+        ref.invalidate(conversationsByTypeProvider(ConversationType.event));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Мероприятие обновлено')),
+        );
+        context.pop();
+      } else {
+        final createdId = await repo.createEvent(
+          title: _title.text.trim(),
+          description: _description.text.trim(),
+          city: _city.text.trim(),
+          location: _location.text.trim(),
+          eventDate: eventDate,
+          maxParticipants: limit,
+          polygonId: _polygon?.id,
+          latitude: _lat,
+          longitude: _lng,
+        );
+
+        if (_photoBytes != null && uid != null) {
+          final url =
+              await ref.read(eventImageStorageServiceProvider).uploadCover(
+                    organizerId: uid,
+                    eventId: createdId,
+                    bytes: _photoBytes!,
+                  );
+          await repo.setEventImageUrl(eventId: createdId, imageUrl: url);
+        }
+
+        ref.invalidate(myOrganizerEventsProvider);
+        ref.invalidate(conversationsByTypeProvider(ConversationType.event));
+        if (!mounted) return;
+        context.go('/main/profile/organizer/events/$createdId');
       }
-
-      ref.invalidate(myOrganizerEventsProvider);
-      ref.invalidate(conversationsByTypeProvider(ConversationType.event));
-      if (!mounted) return;
-      context.go('/main/profile/organizer/events/$eventId');
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = ErrorMapper.map(e));
@@ -293,8 +411,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Создать мероприятие')),
-      body: Form(
+      appBar: AppBar(
+        title: Text(_isEdit ? 'Изменить мероприятие' : 'Создать мероприятие'),
+      ),
+      body: _loadingEvent
+          ? const Center(child: CircularProgressIndicator())
+          : Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -460,34 +582,42 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   aspectRatio: EventCoverSpecs.aspectRatio,
                   child: _photoBytes != null
                       ? Image.memory(_photoBytes!, fit: BoxFit.cover)
-                      : const ColoredBox(
-                          color: AppColors.surfaceElevated,
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.add_photo_alternate_outlined,
-                                  color: AppColors.accent,
+                      : (_existingImageUrl != null &&
+                              _existingImageUrl!.isNotEmpty)
+                          ? AppNetworkImage(
+                              url: _existingImageUrl,
+                              fit: BoxFit.cover,
+                              showSpinner: true,
+                              debugLabel: 'event-cover-edit',
+                            )
+                          : const ColoredBox(
+                              color: AppColors.surfaceElevated,
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.add_photo_alternate_outlined,
+                                      color: AppColors.accent,
+                                    ),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      'Добавить фото 16:9',
+                                      style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                SizedBox(height: 6),
-                                Text(
-                                  'Добавить фото 16:9',
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
                 ),
               ),
             ),
             const SizedBox(height: 18),
             AppButton(
-              label: 'Создать мероприятие',
+              label: _isEdit ? 'Сохранить изменения' : 'Создать мероприятие',
               loading: _saving,
               onPressed: _saving ? null : _submit,
             ),

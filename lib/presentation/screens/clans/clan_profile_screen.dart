@@ -28,7 +28,8 @@ class ClanProfileScreen extends ConsumerWidget {
     final myId = ref.watch(authRepositoryProvider).currentUser?.id;
     final canManage = myRole?.canKickMembers ?? false;
     final canAssignRoles = myRole?.canAssignRoles ?? false;
-    final canDecideJoins = myRole == ClanRole.leader;
+    final canDecideJoins = myRole?.canDecideJoins ?? false;
+    final assignableRoles = myRole?.assignableRoles ?? const <ClanRole>[];
 
     return Scaffold(
       appBar: AppBar(
@@ -243,8 +244,12 @@ class ClanProfileScreen extends ConsumerWidget {
                                     (m.role == ClanRole.officer ||
                                         m.role == ClanRole.leader)),
                             canAssignRole: canAssignRoles &&
+                                assignableRoles.isNotEmpty &&
                                 m.userId != myId &&
-                                m.role != ClanRole.leader,
+                                m.role != ClanRole.leader &&
+                                !(myRole == ClanRole.officer &&
+                                    m.role == ClanRole.officer),
+                            assignableRoles: assignableRoles,
                             onKick: () async {
                               try {
                                 await ref
@@ -388,21 +393,43 @@ class _RequestsBlock extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppColors.surfaceElevated,
-                      backgroundImage: r.avatarUrl != null
-                          ? NetworkImage(r.avatarUrl!)
-                          : null,
-                      child: r.avatarUrl == null
-                          ? Text((r.nickname ?? '?')[0].toUpperCase())
-                          : null,
-                    ),
-                    const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        '${r.nickname ?? 'Боец'} · ${r.rating}',
-                        style: const TextStyle(fontSize: 13.5),
+                      child: InkWell(
+                        onTap: () => context.push(
+                          '/main/profile/user/${r.userId}',
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: AppColors.surfaceElevated,
+                              backgroundImage: r.avatarUrl != null
+                                  ? NetworkImage(r.avatarUrl!)
+                                  : null,
+                              child: r.avatarUrl == null
+                                  ? Text(
+                                      (r.nickname ?? '?')[0].toUpperCase(),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${r.nickname ?? 'Боец'} · ${r.rating}',
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right,
+                              size: 18,
+                              color: AppColors.textTertiary,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     TextButton(
@@ -447,6 +474,7 @@ class _MemberRow extends StatelessWidget {
     required this.member,
     required this.canKick,
     required this.canAssignRole,
+    required this.assignableRoles,
     required this.onKick,
     required this.onAssignRole,
   });
@@ -454,6 +482,7 @@ class _MemberRow extends StatelessWidget {
   final ClanMember member;
   final bool canKick;
   final bool canAssignRole;
+  final List<ClanRole> assignableRoles;
   final VoidCallback onKick;
   final ValueChanged<ClanRole> onAssignRole;
 
@@ -519,11 +548,7 @@ class _MemberRow extends StatelessWidget {
                   tooltip: 'Должность',
                   onSelected: onAssignRole,
                   itemBuilder: (context) => [
-                    for (final role in const [
-                      ClanRole.officer,
-                      ClanRole.trainer,
-                      ClanRole.member,
-                    ])
+                    for (final role in assignableRoles)
                       PopupMenuItem(
                         value: role,
                         enabled: role != member.role,

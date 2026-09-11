@@ -127,6 +127,7 @@ class Profile {
     this.gamesPlayed = 0,
     this.wins = 0,
     this.rating = 0,
+    this.bonusXp = 0,
     this.polygonsVisited = 0,
     this.lastSeenAt,
     required this.createdAt,
@@ -147,6 +148,8 @@ class Profile {
   final int gamesPlayed;
   final int wins;
   final int rating;
+  /// Admin XP adjustment; total XP = activity formula + bonusXp.
+  final int bonusXp;
   final int polygonsVisited;
   final DateTime? lastSeenAt;
   final DateTime createdAt;
@@ -209,6 +212,7 @@ class Profile {
       gamesPlayed: (json['games_played'] as num?)?.toInt() ?? 0,
       wins: (json['wins'] as num?)?.toInt() ?? 0,
       rating: (json['rating'] as num?)?.toInt() ?? 0,
+      bonusXp: (json['bonus_xp'] as num?)?.toInt() ?? 0,
       polygonsVisited: (json['polygons_visited'] as num?)?.toInt() ?? 0,
       lastSeenAt: json['last_seen_at'] == null
           ? null
@@ -250,6 +254,7 @@ class Profile {
     int? gamesPlayed,
     int? wins,
     int? rating,
+    int? bonusXp,
     int? polygonsVisited,
     DateTime? lastSeenAt,
   }) {
@@ -268,6 +273,7 @@ class Profile {
       gamesPlayed: gamesPlayed ?? this.gamesPlayed,
       wins: wins ?? this.wins,
       rating: rating ?? this.rating,
+      bonusXp: bonusXp ?? this.bonusXp,
       polygonsVisited: polygonsVisited ?? this.polygonsVisited,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       createdAt: createdAt,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/conversation.dart';
@@ -104,6 +105,7 @@ class _ListingDetailsScreenState extends ConsumerState<ListingDetailsScreen> {
               ? null
               : images[_photoIndex.clamp(0, images.length - 1)].url;
           final isOwner = userId != null && listing.sellerId == userId;
+          final heroH = AppLayout.listingHeroHeight(context);
 
           return Column(
             children: [
@@ -115,7 +117,7 @@ class _ListingDetailsScreenState extends ConsumerState<ListingDetailsScreen> {
                       color: AppColors.surfaceElevated,
                       child: SizedBox(
                         width: double.infinity,
-                        height: 320,
+                        height: heroH,
                         child: cover == null
                             ? const Icon(
                                 Icons.image_outlined,
@@ -126,7 +128,7 @@ class _ListingDetailsScreenState extends ConsumerState<ListingDetailsScreen> {
                                 url: cover,
                                 fit: BoxFit.contain,
                                 width: double.infinity,
-                                height: 320,
+                                height: heroH,
                                 memCacheWidth: 1200,
                                 debugLabel: 'listing-detail',
                               ),

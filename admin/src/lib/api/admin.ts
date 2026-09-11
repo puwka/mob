@@ -281,6 +281,7 @@ export async function fetchUserDetail(userId: string): Promise<{
         avatar_url: data.avatar_url,
         role: data.role,
         rating: data.rating,
+        bonus_xp: data.bonus_xp ?? 0,
         status: data.status ?? "active",
         created_at: data.created_at,
         clan_id: clan?.clan_id ?? null,

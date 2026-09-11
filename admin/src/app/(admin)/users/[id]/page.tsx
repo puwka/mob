@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/page";
 import { adjustBalance, fetchPanelRole, fetchProfileTag, fetchUserDetail, setAppRole, setPanelRole, setProfileTag, setUserStatus, updateProfileAdmin } from "@/lib/api/admin";
 import { CITIES } from "@/lib/constants";
+import { computePlayerLevel, totalXpForLevel } from "@/lib/level";
 import type { AdminRole } from "@/lib/types";
 import type { ProfileTag } from "@/lib/api/admin";
 import { useAuth } from "@/providers/auth-provider";
@@ -203,7 +204,8 @@ export default function UserDetailPage() {
             </Badge>
           </div>
           <div className="mt-1 text-sm text-graphite-600">
-            {user.phone} · {user.city} · XP {formatNumber(user.rating)}
+            {user.phone} · {user.city} · Ур.{" "}
+            {computePlayerLevel(user.rating)} · XP {formatNumber(user.rating)}
             {user.clan_name ? ` · клан ${user.clan_name}` : ""}
           </div>
         </div>
@@ -391,13 +393,40 @@ export default function UserDetailPage() {
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="XP (рейтинг)">
+            <Field label="Уровень">
               <input
-                className="admin-input opacity-70"
+                className="admin-input"
                 type="number"
-                readOnly
-                value={form.watch("rating") ?? 0}
+                min={1}
+                max={999}
+                value={computePlayerLevel(form.watch("rating") || 0)}
+                onChange={(e) => {
+                  const level = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                  form.setValue("rating", totalXpForLevel(level), {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
+                }}
               />
+              <p className="mt-1 text-[11px] text-graphite-600">
+                При смене уровня выставляется минимальный XP для этого уровня.
+              </p>
+            </Field>
+            <Field label="XP (итоговый)">
+              <input
+                className="admin-input"
+                type="number"
+                min={0}
+                {...form.register("rating", { valueAsNumber: true })}
+              />
+              <p className="mt-1 text-[11px] text-graphite-600">
+                Сейчас уровень {computePlayerLevel(form.watch("rating") || 0)}.
+                Итог = активность + бонус админа
+                {typeof user.bonus_xp === "number"
+                  ? ` (бонус ${formatNumber(user.bonus_xp)})`
+                  : ""}
+                .
+              </p>
             </Field>
             <Field label="Games">
               <input

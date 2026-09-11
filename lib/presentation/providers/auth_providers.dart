@@ -5,6 +5,7 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/profile_repository.dart';
 import '../../domain/models/profile.dart';
 import '../../services/offline_qr_store.dart';
+import '../../services/push_notification_service.dart';
 import 'session_reset.dart';
 
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
@@ -137,6 +138,7 @@ class AuthController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       final uid = ref.read(currentUserProvider)?.id;
+      await PushNotificationService.instance.unregister();
       await ref.read(authRepositoryProvider).logout();
       if (uid != null) {
         final store = await OfflineQrStore.open();

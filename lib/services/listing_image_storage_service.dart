@@ -16,8 +16,8 @@ class ListingImageStorageService {
   static const bucket = 'listing-images';
   static const maxImagesFallback = 8;
   static const maxImages = maxImagesFallback;
-  static const maxEdge = 1280;
-  static const quality = 78;
+  static const maxEdge = 1600;
+  static const quality = 88;
 
   Future<int> resolveMaxImages() async {
     try {
@@ -65,7 +65,7 @@ class ListingImageStorageService {
             fileOptions: const FileOptions(
               upsert: true,
               contentType: 'image/jpeg',
-              cacheControl: '3600',
+              cacheControl: '604800',
             ),
           );
 

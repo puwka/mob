@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../core/layout/app_layout.dart';
 import '../core/theme/app_colors.dart';
 import '../domain/models/listing.dart';
 import 'app_network_image.dart';
@@ -21,6 +22,7 @@ class ListingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cover = listing.coverUrl;
+    final thumbW = AppLayout.listingThumbWidth(context);
 
     return Material(
       color: Colors.transparent,
@@ -41,23 +43,22 @@ class ListingCard extends StatelessWidget {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            height: 104,
+          child: IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
-                  width: 96,
+                  width: thumbW,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
                       AppNetworkImage(
                         url: cover,
                         fit: BoxFit.cover,
-                        width: 96,
-                        height: 104,
-                        memCacheWidth: 240,
-                        memCacheHeight: 260,
+                        width: thumbW,
+                        height: thumbW + 8,
+                        memCacheWidth: (thumbW * 2.5).round(),
+                        memCacheHeight: (thumbW * 2.5).round(),
                         debugLabel: 'listing-cover',
                       ),
                       if (listing.isPromotionActive)
@@ -94,6 +95,7 @@ class ListingCard extends StatelessWidget {
                         padding: const EdgeInsets.fromLTRB(10, 10, 34, 10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               listing.title,
@@ -118,6 +120,8 @@ class ListingCard extends StatelessWidget {
                             const SizedBox(height: 3),
                             Text(
                               listing.city,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall

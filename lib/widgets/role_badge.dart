@@ -118,6 +118,9 @@ class ProfileNameBadges extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!badgeRole.isPrivileged) return const SizedBox.shrink();
-    return RoleBadge(role: badgeRole, compact: compact);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: RoleBadge(role: badgeRole, compact: compact),
+    );
   }
 }

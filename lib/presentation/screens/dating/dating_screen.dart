@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/conversation.dart';
@@ -9,6 +10,8 @@ import '../../../domain/models/dating.dart';
 import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/dating_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
+import '../../../services/app_image_cache.dart';
+import '../../../widgets/app_page_body.dart';
 import '../../../widgets/city_picker.dart';
 import '../../../widgets/feedback.dart';
 import 'dating_match_dialog.dart';
@@ -151,7 +154,7 @@ class _DatingScreenState extends ConsumerState<DatingScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Знакомства'),
+        title: const Text('Дейтинг'),
         actions: [
           IconButton(
             tooltip:
@@ -181,9 +184,10 @@ class _DatingScreenState extends ConsumerState<DatingScreen> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
+        child: AppPageBody(
+          child: Padding(
+            padding: AppLayout.pagePadding(context, top: 8, bottom: 16),
+            child: Column(
             children: [
               if (cityFilter != null) ...[
                 Align(
@@ -231,6 +235,11 @@ class _DatingScreenState extends ConsumerState<DatingScreen> {
                     }
 
                     final candidate = list.first;
+                    // Warm current + next candidates while user swipes.
+                    AppImageCache.prefetch([
+                      for (final c in list.take(3)) ...c.photoUrls,
+                    ], limit: 12);
+
                     return Column(
                       children: [
                         Expanded(
@@ -279,6 +288,7 @@ class _DatingScreenState extends ConsumerState<DatingScreen> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

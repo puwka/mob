@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/layout/app_layout.dart';
 import '../core/theme/app_colors.dart';
-import '../core/utils/event_cover.dart';
 
 class EventListSkeleton extends StatelessWidget {
   const EventListSkeleton({super.key, this.count = 5});
@@ -12,7 +12,7 @@ class EventListSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+      padding: AppLayout.pagePadding(context),
       itemCount: count,
       separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) => const _SkeletonRow(),
@@ -48,6 +48,7 @@ class _SkeletonRowState extends State<_SkeletonRow>
 
   @override
   Widget build(BuildContext context) {
+    final h = AppLayout.eventListThumb(context);
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -57,7 +58,7 @@ class _SkeletonRowState extends State<_SkeletonRow>
         );
       },
       child: Container(
-        height: EventCoverSpecs.listCardHeight,
+        height: h,
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(AppRadii.card),
@@ -66,7 +67,7 @@ class _SkeletonRowState extends State<_SkeletonRow>
         child: Row(
           children: [
             Container(
-              width: EventCoverSpecs.listThumbWidth,
+              width: h,
               color: AppColors.surfaceElevated,
             ),
             Expanded(

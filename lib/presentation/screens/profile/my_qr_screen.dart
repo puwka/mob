@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../presentation/providers/auth_providers.dart';
@@ -115,7 +116,7 @@ class MyQrScreen extends ConsumerWidget {
                       child: QrImageView(
                         data: payload,
                         version: QrVersions.auto,
-                        size: 200,
+                        size: AppLayout.qrSize(context),
                         backgroundColor: AppColors.surfaceElevated,
                         eyeStyle: const QrEyeStyle(
                           eyeShape: QrEyeShape.square,

@@ -87,20 +87,29 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
 
     final repo = ref.read(chatRepositoryProvider);
     if (arg == ConversationType.clan) {
-      await _ensureClanChannels(repo, forUserId: uid);
+      // Don't block inbox on opening clan channels.
+      unawaited(_ensureClanChannels(repo, forUserId: uid));
     } else if (arg == ConversationType.city) {
-      try {
-        await repo.openCityChat();
-      } catch (_) {}
+      unawaited(() async {
+        try {
+          await repo.openCityChat();
+        } catch (_) {}
+      }());
     } else if (arg == ConversationType.event) {
-      try {
-        await repo.autoFinishPastEvents();
-      } catch (_) {}
+      unawaited(() async {
+        try {
+          await repo.autoFinishPastEvents();
+        } catch (_) {}
+      }());
     }
 
     // If session flipped mid-await, don't publish the wrong inbox.
+    // Auth flicker (uid briefly null) should keep the previous list.
     final uidAfter = ref.read(supabaseClientProvider).auth.currentUser?.id;
-    if (uidAfter != uid) return const [];
+    if (uidAfter != uid) {
+      if (uidAfter == null && state.hasValue) return state.requireValue;
+      return const [];
+    }
 
     final list = await repo.fetchConversations(type: arg);
     final visible = arg == ConversationType.clan
@@ -108,7 +117,10 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
         : list;
 
     final uidFinal = ref.read(supabaseClientProvider).auth.currentUser?.id;
-    if (uidFinal != uid) return const [];
+    if (uidFinal != uid) {
+      if (uidFinal == null && state.hasValue) return state.requireValue;
+      return const [];
+    }
 
     unawaited(ref.read(folderUnreadProvider.notifier).refresh(silent: true));
 
@@ -122,7 +134,7 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
               ref.read(supabaseClientProvider).auth.currentUser?.id;
           if (liveUid != _boundUserId) return;
           _debounce?.cancel();
-          _debounce = Timer(const Duration(milliseconds: 400), () {
+          _debounce = Timer(const Duration(milliseconds: 1200), () {
             refresh(silent: true);
             unawaited(
               ref.read(folderUnreadProvider.notifier).refresh(silent: true),
@@ -154,15 +166,31 @@ class ConversationsByTypeNotifier extends FamilyAsyncNotifier<
       final clanIds = await repo.fetchMyClanIds();
       final stillSame =
           ref.read(supabaseClientProvider).auth.currentUser?.id == forUserId;
-      if (!stillSame) return;
-      for (final clanId in clanIds) {
-        await repo.openClanChat(clanId);
-        final role = await ref.read(myClanRoleProvider(clanId).future);
-        if (role?.isLeadership == true) {
-          try {
-            await repo.openClanOfficersChat(clanId);
-          } catch (_) {}
-        }
+      if (!stillSame || clanIds.isEmpty) return;
+
+      await Future.wait([
+        for (final clanId in clanIds) _openChannelsForClan(repo, clanId),
+      ]);
+
+      final live =
+          ref.read(supabaseClientProvider).auth.currentUser?.id == forUserId;
+      if (live) {
+        unawaited(refresh(silent: true));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _openChannelsForClan(
+    ChatRepository repo,
+    String clanId,
+  ) async {
+    try {
+      await repo.openClanChat(clanId);
+    } catch (_) {}
+    try {
+      final role = await ref.read(myClanRoleProvider(clanId).future);
+      if (role?.isLeadership == true) {
+        await repo.openClanOfficersChat(clanId);
       }
     } catch (_) {}
   }
@@ -308,14 +336,24 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
 
   Future<void> _init() async {
     await loadInitial();
+    if (!mounted) return;
     _channel = _ref.read(chatRepositoryProvider).subscribeMessages(
           conversationId: conversationId,
           onInsert: _onRealtimeMessage,
         );
-    await _ref.read(chatRepositoryProvider).markRead(conversationId);
-    unawaited(
-      _ref.read(folderUnreadProvider.notifier).refresh(silent: true),
-    );
+    // Don't block chat open on mark-read / badge refresh.
+    unawaited(() async {
+      try {
+        await _ref.read(chatRepositoryProvider).markRead(conversationId);
+        await _ref.read(folderUnreadProvider.notifier).refresh(silent: true);
+      } catch (_) {}
+    }());
+  }
+
+  List<ChatMessage> _sorted(Iterable<ChatMessage> messages) {
+    final list = messages.toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return list;
   }
 
   Future<void> loadInitial() async {
@@ -326,13 +364,27 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
           .fetchMessages(conversationId: conversationId);
       if (!mounted) return;
       state = state.copyWith(
-        messages: messages,
+        messages: _sorted(messages),
         loading: false,
         hasMore: messages.length >= 40,
       );
     } catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(loading: false, error: e.toString());
+      // One retry — transient network / embed failures.
+      try {
+        final messages = await _ref
+            .read(chatRepositoryProvider)
+            .fetchMessages(conversationId: conversationId);
+        if (!mounted) return;
+        state = state.copyWith(
+          messages: _sorted(messages),
+          loading: false,
+          hasMore: messages.length >= 40,
+          clearError: true,
+        );
+      } catch (e2) {
+        if (!mounted) return;
+        state = state.copyWith(loading: false, error: e2.toString());
+      }
     }
   }
 
@@ -347,7 +399,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
           );
       if (!mounted) return;
       state = state.copyWith(
-        messages: [...older, ...state.messages],
+        messages: _sorted([...older, ...state.messages]),
         loadingMore: false,
         hasMore: older.length >= 40,
       );
@@ -362,42 +414,87 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     unawaited(_handleRealtimeMessage(message));
   }
 
+  bool _matchesPending(ChatMessage pending, ChatMessage incoming) {
+    if (!pending.pending || pending.senderId != incoming.senderId) {
+      return false;
+    }
+    if (pending.messageType != incoming.messageType) return false;
+    if (pending.isImage) {
+      final pendingUrls = pending.resolvedImageUrls;
+      final incomingUrls = incoming.resolvedImageUrls;
+      if (pendingUrls.isEmpty) return true;
+      if (pendingUrls.length != incomingUrls.length) return false;
+      for (var i = 0; i < pendingUrls.length; i++) {
+        if (pendingUrls[i] != incomingUrls[i]) return false;
+      }
+      return true;
+    }
+    if (pending.isVoice) {
+      final pendingUrl = pending.audioUrl;
+      final incomingUrl = incoming.audioUrl;
+      if (pendingUrl == null || pendingUrl.isEmpty) return true;
+      return pendingUrl == incomingUrl;
+    }
+    return pending.text == incoming.text;
+  }
+
+  void _refreshInboxForThisChat() {
+    final detail =
+        _ref.read(conversationDetailProvider(conversationId)).valueOrNull;
+    final type = detail?.type;
+    if (type != null) {
+      _ref.read(conversationsByTypeProvider(type).notifier).refresh(silent: true);
+    } else {
+      for (final t in ConversationType.values) {
+        _ref
+            .read(conversationsByTypeProvider(t).notifier)
+            .refresh(silent: true);
+      }
+    }
+    unawaited(_ref.read(folderUnreadProvider.notifier).refresh(silent: true));
+  }
+
   Future<void> _handleRealtimeMessage(ChatMessage message) async {
-    final enriched =
-        await _ref.read(chatRepositoryProvider).enrichSender(message);
     if (!mounted) return;
-    final exists = state.messages.any((m) => m.id == enriched.id);
-    if (exists) return;
+    if (state.messages.any((m) => m.id == message.id)) return;
 
+    // Show immediately (incl. image_url) — don't wait on profile enrich.
     final withoutPending = state.messages
-        .where(
-          (m) => !(m.pending &&
-              m.senderId == enriched.senderId &&
-              m.text == enriched.text),
-        )
+        .where((m) => !_matchesPending(m, message))
         .toList();
-
-    state = state.copyWith(messages: [...withoutPending, enriched]);
+    state = state.copyWith(messages: _sorted([...withoutPending, message]));
 
     final uid = _ref.read(authRepositoryProvider).currentUser?.id;
-    if (uid != null && enriched.senderId != uid) {
+    if (uid != null && message.senderId != uid) {
       _markReadDebounce?.cancel();
       _markReadDebounce = Timer(const Duration(milliseconds: 300), () {
         unawaited(() async {
-          await _ref.read(chatRepositoryProvider).markRead(conversationId);
-          await _ref
-              .read(folderUnreadProvider.notifier)
-              .refresh(silent: true);
+          try {
+            await _ref.read(chatRepositoryProvider).markRead(conversationId);
+            await _ref
+                .read(folderUnreadProvider.notifier)
+                .refresh(silent: true);
+          } catch (_) {}
         }());
       });
     }
 
-    for (final t in ConversationType.values) {
-      _ref.read(conversationsByTypeProvider(t).notifier).refresh(silent: true);
-    }
+    _refreshInboxForThisChat();
+
+    try {
+      final enriched =
+          await _ref.read(chatRepositoryProvider).enrichSender(message);
+      if (!mounted) return;
+      state = state.copyWith(
+        messages: [
+          for (final m in state.messages)
+            if (m.id == enriched.id) enriched else m,
+        ],
+      );
+    } catch (_) {}
   }
 
-  Future<bool> send(String text) async {
+  Future<bool> send(String text, {String? replyToMessageId, ChatReplyPreview? replyTo}) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
 
@@ -412,15 +509,17 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       conversationId: conversationId,
       senderId: uid,
       text: trimmed,
-      createdAt: DateTime.now(),
+      createdAt: DateTime.now().toUtc(),
       pending: true,
       senderNickname: me?.nickname,
       senderAvatarUrl: me?.avatarUrl,
       senderClanRole: myClanRole,
+      replyToMessageId: replyToMessageId,
+      replyTo: replyTo,
     );
 
     state = state.copyWith(
-      messages: [...state.messages, optimistic],
+      messages: _sorted([...state.messages, optimistic]),
       sending: true,
       clearError: true,
     );
@@ -429,12 +528,14 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       var saved = await _ref.read(chatRepositoryProvider).sendMessage(
             conversationId: conversationId,
             text: trimmed,
+            replyToMessageId: replyToMessageId,
           );
       saved = await _ref.read(chatRepositoryProvider).enrichSender(
             saved.copyWith(
               senderNickname: saved.senderNickname ?? me?.nickname,
               senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
               senderClanRole: saved.senderClanRole ?? myClanRole,
+              replyTo: saved.replyTo ?? replyTo,
             ),
           );
       if (!mounted) return true;
@@ -459,6 +560,8 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     required int durationMs,
     required String contentType,
     required String extension,
+    String? replyToMessageId,
+    ChatReplyPreview? replyTo,
   }) async {
     final uid = _ref.read(authRepositoryProvider).currentUser?.id;
     if (uid == null) return false;
@@ -472,17 +575,19 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       conversationId: conversationId,
       senderId: uid,
       text: '',
-      createdAt: DateTime.now(),
+      createdAt: DateTime.now().toUtc(),
       pending: true,
       messageType: ChatMessageType.voice,
       audioDurationMs: durationMs,
       senderNickname: me?.nickname,
       senderAvatarUrl: me?.avatarUrl,
       senderClanRole: myClanRole,
+      replyToMessageId: replyToMessageId,
+      replyTo: replyTo,
     );
 
     state = state.copyWith(
-      messages: [...state.messages, optimistic],
+      messages: _sorted([...state.messages, optimistic]),
       sending: true,
       clearError: true,
     );
@@ -499,12 +604,14 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
             conversationId: conversationId,
             audioUrl: url,
             durationMs: durationMs,
+            replyToMessageId: replyToMessageId,
           );
       saved = await _ref.read(chatRepositoryProvider).enrichSender(
             saved.copyWith(
               senderNickname: saved.senderNickname ?? me?.nickname,
               senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
               senderClanRole: saved.senderClanRole ?? myClanRole,
+              replyTo: saved.replyTo ?? replyTo,
             ),
           );
       if (!mounted) return true;
@@ -524,10 +631,33 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  Future<bool> sendImage({required Uint8List bytes}) async {
+  static const maxImagesPerMessage = 10;
+
+  Future<bool> sendImage({
+    required Uint8List bytes,
+    String? replyToMessageId,
+    ChatReplyPreview? replyTo,
+  }) {
+    return sendImages(
+      images: [bytes],
+      replyToMessageId: replyToMessageId,
+      replyTo: replyTo,
+    );
+  }
+
+  Future<bool> sendImages({
+    required List<Uint8List> images,
+    String? replyToMessageId,
+    ChatReplyPreview? replyTo,
+  }) async {
     final uid = _ref.read(authRepositoryProvider).currentUser?.id;
     if (uid == null) return false;
-    if (bytes.isEmpty) return false;
+
+    final cleaned = [
+      for (final b in images)
+        if (b.isNotEmpty) b,
+    ].take(maxImagesPerMessage).toList();
+    if (cleaned.isEmpty) return false;
 
     final me = _ref.read(currentProfileProvider).valueOrNull;
     final myClanRole = _myClanRoleInChat();
@@ -537,35 +667,43 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       conversationId: conversationId,
       senderId: uid,
       text: '',
-      createdAt: DateTime.now(),
+      createdAt: DateTime.now().toUtc(),
       pending: true,
       messageType: ChatMessageType.image,
+      imageUrls: const [],
       senderNickname: me?.nickname,
       senderAvatarUrl: me?.avatarUrl,
       senderClanRole: myClanRole,
+      replyToMessageId: replyToMessageId,
+      replyTo: replyTo,
     );
 
     state = state.copyWith(
-      messages: [...state.messages, optimistic],
+      messages: _sorted([...state.messages, optimistic]),
       sending: true,
       clearError: true,
     );
 
     try {
-      final url = await _ref.read(chatImageStorageServiceProvider).uploadImage(
+      final urls = await _ref.read(chatImageStorageServiceProvider).uploadImages(
             userId: uid,
             conversationId: conversationId,
-            bytes: bytes,
+            images: cleaned,
           );
+      if (urls.isEmpty) {
+        throw const AppException('Не удалось загрузить фото');
+      }
       var saved = await _ref.read(chatRepositoryProvider).sendImageMessage(
             conversationId: conversationId,
-            imageUrl: url,
+            imageUrls: urls,
+            replyToMessageId: replyToMessageId,
           );
       saved = await _ref.read(chatRepositoryProvider).enrichSender(
             saved.copyWith(
               senderNickname: saved.senderNickname ?? me?.nickname,
               senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
               senderClanRole: saved.senderClanRole ?? myClanRole,
+              replyTo: saved.replyTo ?? replyTo,
             ),
           );
       if (!mounted) return true;
@@ -612,13 +750,10 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       deduped.remove(tempId);
     }
     state = state.copyWith(
-      messages: deduped.values.toList()
-        ..sort((a, b) => a.createdAt.compareTo(b.createdAt)),
+      messages: _sorted(deduped.values),
       sending: false,
     );
-    for (final t in ConversationType.values) {
-      _ref.read(conversationsByTypeProvider(t).notifier).refresh(silent: true);
-    }
+    _refreshInboxForThisChat();
   }
 
   @override

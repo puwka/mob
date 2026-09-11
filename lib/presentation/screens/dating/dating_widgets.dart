@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/models/dating.dart';
+import '../../../services/app_image_cache.dart';
+import '../../../widgets/app_network_image.dart';
 
 /// Horizontal swipe / tap photo pager with page dots.
 class DatingPhotoViewer extends StatefulWidget {
@@ -26,6 +28,7 @@ class _DatingPhotoViewerState extends State<DatingPhotoViewer> {
   void initState() {
     super.initState();
     _controller = PageController();
+    _prefetchAround(0);
   }
 
   @override
@@ -36,7 +39,19 @@ class _DatingPhotoViewerState extends State<DatingPhotoViewer> {
       if (_controller.hasClients) {
         _controller.jumpToPage(0);
       }
+      _prefetchAround(0);
     }
+  }
+
+  void _prefetchAround(int index) {
+    final photos = widget.photos;
+    if (photos.isEmpty) return;
+    final urls = <String?>[
+      if (index < photos.length) photos[index],
+      if (index + 1 < photos.length) photos[index + 1],
+      if (index + 2 < photos.length) photos[index + 2],
+    ];
+    AppImageCache.prefetch(urls, limit: 3);
   }
 
   @override
@@ -102,41 +117,24 @@ class _DatingPhotoViewerState extends State<DatingPhotoViewer> {
                 onPageChanged: (i) {
                   setState(() => _index = i);
                   widget.onIndexChanged?.call(i);
+                  _prefetchAround(i);
                 },
                 itemBuilder: (context, i) {
-                return Image.network(
-                  photos[i],
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  filterQuality: FilterQuality.medium,
-                  cacheWidth: 900,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return const ColoredBox(
-                      color: AppColors.surfaceElevated,
-                      child: Center(
-                        child: SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    debugPrint('[STORAGE] IMAGE_FAIL dating $error ${photos[i]}');
-                    return const ColoredBox(
-                      color: AppColors.surfaceElevated,
-                      child: Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: AppColors.textTertiary,
-                          size: 40,
-                        ),
-                      ),
-                    );
-                  },
-                );
+                  final w = constraints.maxWidth;
+                  final h = constraints.maxHeight;
+                  return AppNetworkImage(
+                    url: photos[i],
+                    fit: BoxFit.cover,
+                    width: w.isFinite ? w : null,
+                    height: h.isFinite ? h : null,
+                    memCacheWidth: (w.isFinite ? w : 420).round().clamp(320, 900),
+                    memCacheHeight:
+                        (h.isFinite ? h : 640).round().clamp(480, 1200),
+                    filterQuality: FilterQuality.medium,
+                    showSpinner: true,
+                    debugLabel: 'dating',
+                    placeholderIcon: Icons.person_outline,
+                  );
                 },
               ),
               if (photos.length > 1)

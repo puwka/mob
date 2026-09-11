@@ -16,6 +16,7 @@ import {
   deleteClan,
   fetchClanMembers,
   fetchClans,
+  fetchCities,
   removeClanMember,
   upsertClan,
   type ClanRow,
@@ -326,6 +327,14 @@ function ClanFormModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const citiesQ = useQuery({
+    queryKey: ["cities"],
+    queryFn: () => fetchCities(),
+  });
+  const cityOptions = (citiesQ.data ?? [])
+    .map((c) => c.name)
+    .filter((n) => n.trim().length > 0);
+
   const usersQ = useQuery({
     queryKey: ["clan-leader-pick", leaderQ],
     queryFn: () => fetchUsers({ search: leaderQ || undefined, limit: 20 }),
@@ -351,12 +360,22 @@ function ClanFormModal({
             value={tag}
             onChange={(e) => setTag(e.target.value)}
           />
-          <input
+          <select
             className="admin-input"
-            placeholder="Местоположение (город)"
             value={city}
             onChange={(e) => setCity(e.target.value)}
-          />
+            required
+          >
+            <option value="">Город *</option>
+            {city && !cityOptions.includes(city) ? (
+              <option value={city}>{city} (текущий)</option>
+            ) : null}
+            {cityOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
           <textarea
             className="admin-input min-h-[70px]"
             placeholder="Описание"
@@ -412,12 +431,25 @@ function ClanFormModal({
                 setBusy(true);
                 setError(null);
                 try {
+                  const cityTrim = city.trim();
+                  if (!cityTrim) {
+                    throw new Error("Укажите город");
+                  }
+                  if (!name.trim()) {
+                    throw new Error("Укажите название");
+                  }
+                  if (!tag.trim()) {
+                    throw new Error("Укажите TAG");
+                  }
+                  if (!initial && !leaderId) {
+                    throw new Error("Укажите лидера");
+                  }
                   await upsertClan({
                     id: initial?.id,
                     name,
                     tag,
                     description,
-                    city: city.trim() || null,
+                    city: cityTrim,
                     avatarUrl,
                     clearAvatar: !avatarUrl,
                     leaderId: leaderId || undefined,

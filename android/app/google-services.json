@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "441327641067",
+    "project_id": "strikeball-478dd",
+    "storage_bucket": "strikeball-478dd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:441327641067:android:57cffe22fc41ef26c0f9ae",
+        "android_client_info": {
+          "package_name": "ru.moystrikbol.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCeztOMOoOmNA-uckMDM2pOJZTMlciiaTY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

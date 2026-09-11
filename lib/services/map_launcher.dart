@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/utils/app_exception.dart';
 
-/// Opens an external maps app for the given coordinates or search query.
+/// Opens Yandex Maps (fallback: web) for coordinates or search query.
 class MapLauncher {
   static Future<void> open({
     double? latitude,
@@ -18,25 +18,42 @@ class MapLauncher {
       throw const AppException('Адрес не указан');
     }
 
-    final Uri uri;
+    final candidates = <Uri>[];
     if (hasCoords) {
-      uri = Uri.parse(
-        'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+      candidates.add(
+        Uri.parse(
+          'yandexmaps://maps.yandex.ru/?pt=$longitude,$latitude&z=16&l=map',
+        ),
+      );
+      candidates.add(
+        Uri.parse(
+          'https://yandex.ru/maps/?pt=$longitude,$latitude&z=16&l=map',
+        ),
       );
     } else {
-      uri = Uri.parse(
-        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(q)}',
+      candidates.add(
+        Uri.parse(
+          'yandexmaps://maps.yandex.ru/?text=${Uri.encodeComponent(q)}',
+        ),
+      );
+      candidates.add(
+        Uri.parse(
+          'https://yandex.ru/maps/?text=${Uri.encodeComponent(q)}',
+        ),
       );
     }
 
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok) {
-      throw const AppException('Не удалось открыть карту');
+    for (final uri in candidates) {
+      try {
+        final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (ok) return;
+      } catch (_) {}
     }
+    throw const AppException('Не удалось открыть Яндекс Карты');
   }
 }
 
-/// Lightweight Nominatim helpers (OSM) for reverse / forward geocoding.
+/// Lightweight Nominatim helpers for reverse / forward geocoding.
 class GeocodingService {
   static const _userAgent = 'MoyStraykbol/1.0 (organizer-maps)';
 

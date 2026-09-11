@@ -285,6 +285,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                             ),
                             routes: [
                               GoRoute(
+                                path: 'edit',
+                                builder: (context, state) => CreateEventScreen(
+                                  eventId: state.pathParameters['eventId'],
+                                ),
+                              ),
+                              GoRoute(
                                 path: 'participants',
                                 builder: (context, state) =>
                                     EventParticipantsScreen(

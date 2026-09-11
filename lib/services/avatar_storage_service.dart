@@ -31,7 +31,7 @@ class AvatarStorageService {
             fileOptions: FileOptions(
               upsert: true,
               contentType: contentType,
-              cacheControl: '3600',
+              cacheControl: '604800',
             ),
           );
 

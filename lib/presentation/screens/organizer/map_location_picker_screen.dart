@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/models/polygon.dart';
 import '../../../services/map_launcher.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_text_field.dart';
+import '../../../widgets/map_lat_lng.dart';
+import '../../../widgets/yandex_map_view.dart';
 
-/// Full-screen OSM map to pick a pin. Returns [MapPickResult] via Navigator.
+/// Full-screen Yandex map to pick a pin. Returns [MapPickResult] via Navigator.
 class MapLocationPickerScreen extends StatefulWidget {
   const MapLocationPickerScreen({
     super.key,
@@ -29,10 +29,11 @@ class MapLocationPickerScreen extends StatefulWidget {
 }
 
 class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
-  static const _default = LatLng(55.7558, 37.6173);
+  static const _defaultLat = 55.7558;
+  static const _defaultLng = 37.6173;
 
-  late final MapController _mapController;
-  late LatLng _pin;
+  late double _lat;
+  late double _lng;
   late final TextEditingController _search;
   late final TextEditingController _address;
   var _resolving = false;
@@ -41,11 +42,8 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
   @override
   void initState() {
     super.initState();
-    _mapController = MapController();
-    _pin = LatLng(
-      widget.initialLatitude ?? _default.latitude,
-      widget.initialLongitude ?? _default.longitude,
-    );
+    _lat = widget.initialLatitude ?? _defaultLat;
+    _lng = widget.initialLongitude ?? _defaultLng;
     _search = TextEditingController();
     _address = TextEditingController(text: widget.initialAddress ?? '');
     if ((widget.initialAddress == null || widget.initialAddress!.isEmpty) &&
@@ -58,15 +56,14 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
   void dispose() {
     _search.dispose();
     _address.dispose();
-    _mapController.dispose();
     super.dispose();
   }
 
   Future<void> _reverse() async {
     setState(() => _resolving = true);
     final addr = await GeocodingService.reverseAddress(
-      latitude: _pin.latitude,
-      longitude: _pin.longitude,
+      latitude: _lat,
+      longitude: _lng,
     );
     if (!mounted) return;
     setState(() {
@@ -90,18 +87,26 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
       return;
     }
     setState(() {
-      _pin = LatLng(hit.lat, hit.lng);
+      _lat = hit.lat;
+      _lng = hit.lng;
       _address.text = hit.label;
     });
-    _mapController.move(_pin, 15);
+  }
+
+  void _onPinChanged(MapLatLng point) {
+    setState(() {
+      _lat = point.latitude;
+      _lng = point.longitude;
+    });
+    _reverse();
   }
 
   void _confirm() {
     final address = _address.text.trim();
     Navigator.of(context).pop(
       MapPickResult(
-        latitude: _pin.latitude,
-        longitude: _pin.longitude,
+        latitude: _lat,
+        longitude: _lng,
         address: address.isEmpty ? null : address,
       ),
     );
@@ -141,37 +146,12 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
           Expanded(
             child: Stack(
               children: [
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _pin,
-                    initialZoom: 13,
-                    onTap: (_, point) {
-                      setState(() => _pin = point);
-                      _reverse();
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.moystraykbol.app',
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _pin,
-                          width: 48,
-                          height: 48,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: AppColors.accent,
-                            size: 44,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                YandexMapView(
+                  latitude: _lat,
+                  longitude: _lng,
+                  zoom: 13,
+                  interactivePin: true,
+                  onPinChanged: _onPinChanged,
                 ),
                 Positioned(
                   left: 16,

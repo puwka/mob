@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/listing.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/market_providers.dart';
+import '../../../widgets/app_page_body.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/listing_card.dart';
 import '../../../widgets/market_filter_sheet.dart';
+import '../../../services/app_image_cache.dart';
 
 class MarketScreen extends ConsumerStatefulWidget {
   const MarketScreen({super.key});
@@ -248,7 +251,8 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: listingsAsync.when(
+              child: AppPageBody(
+                child: listingsAsync.when(
                 skipLoadingOnReload: true,
                 skipLoadingOnRefresh: true,
                 loading: () => const Center(
@@ -269,7 +273,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   if (listings.isEmpty) {
                     return ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(AppLayout.pageGutter(context)),
                       children: const [
                         SizedBox(height: 48),
                         EmptyStateCard(
@@ -281,24 +285,34 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                       ],
                     );
                   }
-                  return ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                    itemCount: listings.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final item = listings[index];
-                      return ListingCard(
-                        listing: item,
-                        onTap: () => context.push('/main/market/${item.id}'),
-                        onFavorite: () => ref
-                            .read(marketListingsProvider.notifier)
-                            .toggleFavorite(item.id),
+                  return Builder(
+                    builder: (context) {
+                      AppImageCache.prefetch(
+                        listings.take(20).map((e) => e.coverUrl),
+                        limit: 20,
+                      );
+                      return ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: AppLayout.pagePadding(context),
+                        itemCount: listings.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = listings[index];
+                          return ListingCard(
+                            listing: item,
+                            onTap: () =>
+                                context.push('/main/market/${item.id}'),
+                            onFavorite: () => ref
+                                .read(marketListingsProvider.notifier)
+                                .toggleFavorite(item.id),
+                          );
+                        },
                       );
                     },
                   );
                 },
+              ),
               ),
             ),
           ],

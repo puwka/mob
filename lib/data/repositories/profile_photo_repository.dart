@@ -61,9 +61,9 @@ class ProfilePhotoRepository {
 
       final compressed = await FlutterImageCompress.compressWithList(
         bytes,
-        minWidth: 1080,
-        minHeight: 1080,
-        quality: 82,
+        minWidth: 1600,
+        minHeight: 1600,
+        quality: 88,
         format: CompressFormat.jpeg,
       );
       final data = compressed.isEmpty ? bytes : Uint8List.fromList(compressed);
@@ -78,7 +78,7 @@ class ProfilePhotoRepository {
             fileOptions: const FileOptions(
               upsert: true,
               contentType: 'image/jpeg',
-              cacheControl: '3600',
+              cacheControl: '604800',
             ),
           );
 

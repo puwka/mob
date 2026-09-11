@@ -30,7 +30,25 @@ enum ClanRole {
   bool get canKickMembers =>
       this == ClanRole.leader || this == ClanRole.officer;
 
-  bool get canAssignRoles => this == ClanRole.leader;
+  bool get canDecideJoins =>
+      this == ClanRole.leader || this == ClanRole.officer;
+
+  bool get canAssignRoles =>
+      this == ClanRole.leader || this == ClanRole.officer;
+
+  /// Roles this position may assign to others.
+  List<ClanRole> get assignableRoles => switch (this) {
+        ClanRole.leader => const [
+          ClanRole.officer,
+          ClanRole.trainer,
+          ClanRole.member,
+        ],
+        ClanRole.officer => const [
+          ClanRole.trainer,
+          ClanRole.member,
+        ],
+        _ => const [],
+      };
 }
 
 enum ClanJoinStatus {
