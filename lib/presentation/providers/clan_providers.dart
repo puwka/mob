@@ -48,6 +48,10 @@ class ClanDetailNotifier extends FamilyAsyncNotifier<Clan, String> {
       () => ref.read(clanRepositoryProvider).fetchClan(arg),
     );
   }
+
+  void apply(Clan clan) {
+    state = AsyncData(clan);
+  }
 }
 
 final clanMembersProvider =
@@ -57,9 +61,12 @@ final clanMembersProvider =
 
 final clanSearchQueryProvider = StateProvider<String>((ref) => '');
 
+/// Clan directory: only clans from the current user's profile city.
+/// All-city clans live in Ranking (Общий).
 final clanSearchProvider = FutureProvider<List<Clan>>((ref) {
   final q = ref.watch(clanSearchQueryProvider);
-  return ref.watch(clanRepositoryProvider).searchClans(query: q);
+  final city = ref.watch(currentProfileProvider).valueOrNull?.city;
+  return ref.watch(clanRepositoryProvider).searchClans(query: q, city: city);
 });
 
 final clanPendingRequestsProvider =

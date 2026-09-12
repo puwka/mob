@@ -103,8 +103,8 @@ class GameRoleBadge extends StatelessWidget {
   }
 }
 
-/// Privilege/status badge near the nickname (admin / moderator / …).
-/// Game class is shown as the emblem icon on the right, not as a chip.
+/// Privilege/status badge under the emblem (admin / moderator / …).
+/// Game class is shown as the emblem icon, not as a chip.
 class ProfileNameBadges extends StatelessWidget {
   const ProfileNameBadges({
     super.key,
@@ -118,9 +118,6 @@ class ProfileNameBadges extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!badgeRole.isPrivileged) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: RoleBadge(role: badgeRole, compact: compact),
-    );
+    return RoleBadge(role: badgeRole, compact: compact);
   }
 }

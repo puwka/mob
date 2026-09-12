@@ -311,7 +311,6 @@ class _PublicHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ProfileNameBadges(badgeRole: profile.badgeRole),
                     Text(
                       profile.nickname,
                       style: Theme.of(context)
@@ -347,23 +346,31 @@ class _PublicHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF231F12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppColors.gold.withValues(alpha: 0.55),
+              Column(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF231F12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.gold.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Icon(
+                      profile.parsedGameRole != null
+                          ? gameRoleIcon(profile.parsedGameRole!)
+                          : Icons.shield,
+                      color: AppColors.gold,
+                      size: 22,
+                    ),
                   ),
-                ),
-                child: Icon(
-                  profile.parsedGameRole != null
-                      ? gameRoleIcon(profile.parsedGameRole!)
-                      : Icons.shield,
-                  color: AppColors.gold,
-                  size: 22,
-                ),
+                  if (profile.badgeRole.isPrivileged) ...[
+                    const SizedBox(height: 8),
+                    RoleBadge(role: profile.badgeRole, compact: true),
+                  ],
+                ],
               ),
             ],
           ),

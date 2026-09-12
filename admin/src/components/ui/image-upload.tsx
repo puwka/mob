@@ -10,12 +10,14 @@ export function ImageUploadField({
   value,
   onChange,
   label = "Изображение",
+  hint,
 }: {
   bucket: StorageBucket;
   folder: string;
   value?: string | null;
   onChange: (url: string | null) => void;
   label?: string;
+  hint?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +25,9 @@ export function ImageUploadField({
   return (
     <div className="space-y-2">
       <div className="text-[12px] text-graphite-600">{label}</div>
+      {hint ? (
+        <p className="text-[11px] leading-snug text-graphite-600">{hint}</p>
+      ) : null}
       {value ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img

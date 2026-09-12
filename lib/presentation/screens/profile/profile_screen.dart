@@ -511,7 +511,6 @@ class _HeaderBlock extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ProfileNameBadges(badgeRole: profile.badgeRole),
                     Text(
                       profile.nickname,
                       style: Theme.of(context)
@@ -541,7 +540,15 @@ class _HeaderBlock extends StatelessWidget {
                   ],
                 ),
               ),
-              _Emblem(gameRole: profile.parsedGameRole),
+              Column(
+                children: [
+                  _Emblem(gameRole: profile.parsedGameRole),
+                  if (profile.badgeRole.isPrivileged) ...[
+                    const SizedBox(height: 8),
+                    RoleBadge(role: profile.badgeRole, compact: true),
+                  ],
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 14),

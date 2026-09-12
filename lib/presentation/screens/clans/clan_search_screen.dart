@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/clan.dart';
 import '../../../presentation/providers/clan_providers.dart';
+import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/profile_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
 import '../../../services/level_service.dart';
@@ -35,6 +36,8 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
   Widget build(BuildContext context) {
     final async = ref.watch(clanSearchProvider);
     final myClan = ref.watch(myClanProvider).valueOrNull;
+    final profileCity =
+        ref.watch(currentProfileProvider).valueOrNull?.city.trim() ?? '';
     final level = ref.watch(levelProgressProvider).currentLevel;
     final canCreateClan = myClan == null &&
         level >= LevelService.minLevelToCreateClan;
@@ -73,6 +76,19 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
       ),
       body: Column(
         children: [
+          if (profileCity.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Кланы города: $profileCity',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: SizedBox(
@@ -102,11 +118,13 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
               ),
               data: (clans) {
                 if (clans.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
                     child: EmptyStateCard(
                       title: 'Кланы не найдены',
-                      subtitle: 'Создайте свой или измените запрос.',
+                      subtitle: profileCity.isEmpty
+                          ? 'Укажите город в профиле, чтобы видеть кланы своего города.'
+                          : 'В городе $profileCity пока нет кланов. Создайте свой или смотрите все в рейтинге (Общий).',
                       icon: Icons.shield_outlined,
                     ),
                   );

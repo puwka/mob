@@ -174,16 +174,17 @@ class ClanProfileScreen extends ConsumerWidget {
                           );
                           if (selected == null || !context.mounted) return;
                           try {
-                            await ref
+                            final updated = await ref
                                 .read(clanRepositoryProvider)
                                 .updateClanInfo(
                                   clanId: clanId,
                                   city: selected,
                                 );
-                            await ref
+                            ref
                                 .read(clanDetailProvider(clanId).notifier)
-                                .refresh();
+                                .apply(updated);
                             ref.invalidate(myClanProvider);
+                            ref.invalidate(clanSearchProvider);
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(

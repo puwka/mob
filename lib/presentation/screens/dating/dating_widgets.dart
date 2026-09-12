@@ -367,7 +367,7 @@ class DatingActionButtons extends StatelessWidget {
                       ),
                     )
                   : const Text(
-                      'Нравится',
+                      'Дружить',
                       style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                     ),
             ),

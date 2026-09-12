@@ -8,6 +8,8 @@ import '../data/repositories/cities_repository.dart';
 Future<String?> showCityPicker(
   BuildContext context, {
   String? selected,
+  /// Shown first in the list (e.g. profile city).
+  String? priorityCity,
 }) {
   return showModalBottomSheet<String>(
     context: context,
@@ -16,14 +18,35 @@ Future<String?> showCityPicker(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (context) => _CityPickerSheet(selected: selected),
+    builder: (context) => _CityPickerSheet(
+      selected: selected,
+      priorityCity: priorityCity,
+    ),
   );
 }
 
+List<String> prioritizeCity(List<String> cities, String? priorityCity) {
+  final priority = priorityCity?.trim();
+  if (priority == null || priority.isEmpty) {
+    return List<String>.from(cities);
+  }
+  final lower = priority.toLowerCase();
+  final match = cities.cast<String?>().firstWhere(
+        (c) => c!.toLowerCase() == lower,
+        orElse: () => priority,
+      )!;
+  final rest = cities.where((c) => c.toLowerCase() != lower).toList();
+  return [match, ...rest];
+}
+
 class _CityPickerSheet extends StatefulWidget {
-  const _CityPickerSheet({this.selected});
+  const _CityPickerSheet({
+    this.selected,
+    this.priorityCity,
+  });
 
   final String? selected;
+  final String? priorityCity;
 
   @override
   State<_CityPickerSheet> createState() => _CityPickerSheetState();
@@ -37,7 +60,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _all = List<String>.from(Cities.all);
+    _all = prioritizeCity(Cities.all, widget.priorityCity);
     _items = _all;
     _load();
   }
@@ -46,9 +69,10 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
     final names = await CitiesRepository(Supabase.instance.client)
         .fetchActiveNames();
     if (!mounted) return;
+    final ordered = prioritizeCity(names, widget.priorityCity);
     setState(() {
-      _all = names;
-      _items = names;
+      _all = ordered;
+      _items = ordered;
       _loading = false;
     });
   }
@@ -64,9 +88,8 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.sizeOf(context).height * 0.7;
     return SizedBox(
-      height: height,
+      height: MediaQuery.sizeOf(context).height * 0.7,
       child: Column(
         children: [
           const SizedBox(height: 10),
@@ -100,8 +123,21 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                 itemBuilder: (context, index) {
                   final city = _items[index];
                   final isSelected = city == widget.selected;
+                  final priority = widget.priorityCity?.trim();
+                  final isPriority = priority != null &&
+                      priority.isNotEmpty &&
+                      city.toLowerCase() == priority.toLowerCase();
                   return ListTile(
                     title: Text(city),
+                    subtitle: isPriority
+                        ? const Text(
+                            'Ваш город',
+                            style: TextStyle(
+                              color: AppColors.accent,
+                              fontSize: 12,
+                            ),
+                          )
+                        : null,
                     trailing: isSelected
                         ? const Icon(Icons.check, color: AppColors.accent)
                         : null,

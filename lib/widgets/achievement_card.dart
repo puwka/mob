@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../domain/models/user_achievement_progress.dart';
 import '../services/achievement_service.dart';
+import 'app_network_image.dart';
 
 /// Hexagonal tactical badge matching reference achievement style.
 class AchievementCard extends StatelessWidget {
@@ -36,6 +37,13 @@ class AchievementCard extends StatelessWidget {
             ? const Color(0xFF1E2228)
             : const Color(0xFF14171C);
 
+    final iconSize = compact ? 22.0 : 26.0;
+    final iconColor = unlocked
+        ? AppColors.gold
+        : inProgress
+            ? AppColors.silver
+            : AppColors.textTertiary;
+
     return Opacity(
       opacity: state == AchievementVisualState.locked ? 0.55 : 1,
       child: Column(
@@ -51,14 +59,10 @@ class AchievementCard extends StatelessWidget {
                 strokeWidth: unlocked ? 1.6 : 1.1,
               ),
               child: Center(
-                child: Icon(
-                  _iconFor(item.achievement.icon),
-                  size: compact ? 20 : 22,
-                  color: unlocked
-                      ? AppColors.gold
-                      : inProgress
-                          ? AppColors.silver
-                          : AppColors.textTertiary,
+                child: _AchievementGlyph(
+                  icon: item.achievement.icon,
+                  size: iconSize,
+                  color: iconColor,
                 ),
               ),
             ),
@@ -104,6 +108,46 @@ class AchievementCard extends StatelessWidget {
       default:
         return 'игр';
     }
+  }
+}
+
+class _AchievementGlyph extends StatelessWidget {
+  const _AchievementGlyph({
+    required this.icon,
+    required this.size,
+    required this.color,
+  });
+
+  final String icon;
+  final double size;
+  final Color color;
+
+  static bool _isImageUrl(String value) {
+    final lower = value.toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isImageUrl(icon)) {
+      return ClipOval(
+        child: AppNetworkImage(
+          url: icon,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          memCacheWidth: (size * 3).round(),
+          placeholderIcon: Icons.emoji_events,
+          errorIcon: Icons.emoji_events,
+          backgroundColor: Colors.transparent,
+          iconSize: size * 0.7,
+          showSpinner: false,
+          debugLabel: 'achievement-icon',
+        ),
+      );
+    }
+
+    return Icon(_iconFor(icon), size: size * 0.85, color: color);
   }
 
   IconData _iconFor(String icon) {

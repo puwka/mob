@@ -8,76 +8,115 @@ import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/event.dart';
+import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/events_provider.dart';
-import '../../../presentation/providers/repository_providers.dart';
 import '../../../widgets/app_network_image.dart';
 import '../../../widgets/app_page_body.dart';
+import '../../../widgets/city_picker.dart';
 import '../../../widgets/event_list_skeleton.dart';
 import '../../../widgets/feedback.dart';
 import '../../../services/app_image_cache.dart';
 
-final eventFilterCitiesProvider = FutureProvider<List<String>>((ref) async {
-  final names =
-      await ref.watch(citiesRepositoryProvider).fetchActiveNames();
-  return EventCities.filterOptionsFrom(names);
-});
-
 class EventsScreen extends ConsumerWidget {
   const EventsScreen({super.key});
+
+  Future<void> _pickCity(BuildContext context, WidgetRef ref) async {
+    final filter = ref.read(eventCityFilterProvider);
+    final profileCity =
+        ref.read(currentProfileProvider).valueOrNull?.city.trim();
+    final selected = await showCityPicker(
+      context,
+      selected: filter == EventCities.all ? profileCity : filter,
+      priorityCity: profileCity,
+    );
+    if (selected == null) return;
+    ref.read(eventCityFilterProvider.notifier).state = selected;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(eventCityFilterProvider);
     final eventsAsync = ref.watch(eventsListProvider);
-    final cities =
-        ref.watch(eventFilterCitiesProvider).valueOrNull ??
-            EventCities.filterOptions;
     final gutter = AppLayout.pageGutter(context);
+    final citySelected = filter != EventCities.all;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Мероприятия')),
       body: Column(
         children: [
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: gutter),
-              itemCount: cities.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 6),
-              itemBuilder: (context, index) {
-                final city = cities[index];
-                final selected = city == filter;
-                return GestureDetector(
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: gutter),
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: EventCities.all,
+                  selected: !citySelected,
                   onTap: () {
-                    ref.read(eventCityFilterProvider.notifier).state = city;
+                    ref.read(eventCityFilterProvider.notifier).state =
+                        EventCities.all;
                   },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppColors.accentSoft
-                          : AppColors.surfaceElevated,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Material(
+                    color: citySelected
+                        ? AppColors.accentSoft
+                        : AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppRadii.chip),
+                    child: InkWell(
+                      onTap: () => _pickCity(context, ref),
                       borderRadius: BorderRadius.circular(AppRadii.chip),
-                      border: Border.all(
-                        color: selected ? AppColors.accentDim : AppColors.border,
-                      ),
-                    ),
-                    child: Text(
-                      city,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
-                        color: selected
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(AppRadii.chip),
+                          border: Border.all(
+                            color: citySelected
+                                ? AppColors.accentDim
+                                : AppColors.border,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.location_city_outlined,
+                              size: 16,
+                              color: citySelected
+                                  ? AppColors.accent
+                                  : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                citySelected ? filter : 'Выбрать город',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: citySelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: citySelected
+                                      ? AppColors.textPrimary
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.expand_more,
+                              size: 18,
+                              color: citySelected
+                                  ? AppColors.accent
+                                  : AppColors.textTertiary,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                );
-              },
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -144,6 +183,46 @@ class EventsScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accentSoft : AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(AppRadii.chip),
+          border: Border.all(
+            color: selected ? AppColors.accentDim : AppColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color:
+                selected ? AppColors.textPrimary : AppColors.textSecondary,
+          ),
+        ),
       ),
     );
   }

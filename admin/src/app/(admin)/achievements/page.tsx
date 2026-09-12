@@ -93,7 +93,18 @@ export default function AchievementsPage() {
                   <td className="font-mono text-[12px]">
                     ≥ {formatNumber(a.required_value)}
                   </td>
-                  <td className="text-[12px]">{a.icon}</td>
+                  <td className="text-[12px]">
+                    {/^https?:\/\//i.test(a.icon) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={a.icon}
+                        alt=""
+                        className="h-8 w-8 rounded object-cover border border-graphite-700"
+                      />
+                    ) : (
+                      a.icon
+                    )}
+                  </td>
                   <td>
                     <Badge tone={a.is_active ? "lime" : "red"}>
                       {a.is_active ? "on" : "off"}
@@ -159,7 +170,10 @@ function AchievementForm({
     initial?.required_value ?? 10,
   );
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
-  const [iconUrl, setIconUrl] = useState<string | null>(null);
+  const [iconUrl, setIconUrl] = useState<string | null>(() => {
+    const v = initial?.icon ?? "";
+    return /^https?:\/\//i.test(v) ? v : null;
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -215,6 +229,7 @@ function AchievementForm({
               if (url) setIcon(url);
             }}
             label="Или загрузить файл иконки (URL сохранится в icon)"
+            hint="Размер: квадрат 256×256 или 512×512 px. Формат PNG / WebP / SVG, до 2 МБ."
           />
           <label className="flex items-center gap-2 text-sm text-white">
             <input

@@ -45,7 +45,18 @@ class ClanRepository {
             .eq('id', clanId)
             .single()
             .timeout(const Duration(seconds: 12));
-        return Clan.fromJson(Map<String, dynamic>.from(row));
+        final map = Map<String, dynamic>.from(row);
+        // Legacy view may omit city (created before column existed).
+        if (map['city'] == null) {
+          final base = await _client
+              .from('clans')
+              .select('city')
+              .eq('id', clanId)
+              .maybeSingle()
+              .timeout(const Duration(seconds: 8));
+          if (base != null) map['city'] = base['city'];
+        }
+        return Clan.fromJson(map);
       } catch (_) {
         final row = await _client
             .from('clans')
@@ -74,12 +85,19 @@ class ClanRepository {
     }
   }
 
-  Future<List<Clan>> searchClans({String query = ''}) async {
+  Future<List<Clan>> searchClans({
+    String query = '',
+    String? city,
+  }) async {
     try {
       final q = query.trim();
+      final cityTrim = city?.trim() ?? '';
+      // Clan directory is city-scoped; without a city there is nothing to list.
+      if (cityTrim.isEmpty) return const [];
+
       List rows;
       try {
-        var req = _client.from('clans_with_stats').select();
+        var req = _client.from('clans_with_stats').select().eq('city', cityTrim);
         if (q.isNotEmpty) {
           final safe = q.replaceAll(',', ' ');
           req = req.or('name.ilike.%$safe%,tag.ilike.%$safe%');
@@ -90,7 +108,7 @@ class ClanRepository {
                 .timeout(const Duration(seconds: 15))
             as List;
       } catch (_) {
-        var req = _client.from('clans').select();
+        var req = _client.from('clans').select().eq('city', cityTrim);
         if (q.isNotEmpty) {
           final safe = q.replaceAll(',', ' ');
           req = req.or('name.ilike.%$safe%,tag.ilike.%$safe%');
@@ -110,9 +128,11 @@ class ClanRepository {
           rows.add(map);
         }
       }
+      final cityLower = cityTrim.toLowerCase();
       return [
-        for (final r in rows) Clan.fromJson(Map<String, dynamic>.from(r as Map)),
-      ];
+        for (final r in rows)
+          Clan.fromJson(Map<String, dynamic>.from(r as Map)),
+      ].where((c) => (c.city ?? '').trim().toLowerCase() == cityLower).toList();
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
     }

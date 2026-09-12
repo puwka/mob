@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../domain/models/conversation.dart';
 import '../../../domain/models/dating.dart';
+import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/dating_providers.dart';
 import '../../../presentation/providers/repository_providers.dart';
@@ -76,7 +77,13 @@ class _DatingScreenState extends ConsumerState<DatingScreen> {
 
   Future<void> _pickCityFilter() async {
     final current = ref.read(datingCityFilterProvider);
-    final city = await showCityPicker(context, selected: current);
+    final profileCity =
+        ref.read(currentProfileProvider).valueOrNull?.city.trim();
+    final city = await showCityPicker(
+      context,
+      selected: current ?? profileCity,
+      priorityCity: profileCity,
+    );
     if (!mounted) return;
     if (city == null) return;
     ref.read(datingCityFilterProvider.notifier).state = city;
