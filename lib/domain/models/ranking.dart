@@ -51,7 +51,7 @@ class RankingClanEntry {
   factory RankingClanEntry.fromJson(Map<String, dynamic> json) {
     return RankingClanEntry(
       id: json['id'] as String,
-      name: (json['name'] as String?) ?? 'Клан',
+      name: (json['name'] as String?) ?? 'Команда',
       tag: (json['tag'] as String?) ?? 'CLAN',
       rating: (json['rating'] as num?)?.toInt() ?? 0,
       membersCount: (json['members_count'] as num?)?.toInt() ?? 0,

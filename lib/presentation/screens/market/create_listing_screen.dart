@@ -140,6 +140,10 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       if (userId == null) throw const FormatException('auth');
 
       late Listing listing;
+      final isServices =
+          _rootCategoryId == MarketKnownCategories.servicesRootId;
+      final condition =
+          isServices ? ListingCondition.used : _condition;
       if (widget.isEdit) {
         listing = await repo.updateListing(
           id: widget.listingId!,
@@ -148,7 +152,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
           description: _description.text,
           price: price,
           city: _city.text,
-          condition: _condition,
+          condition: condition,
         );
 
         for (final removed in _removedExisting) {
@@ -164,7 +168,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
           description: _description.text,
           price: price,
           city: _city.text,
-          condition: _condition,
+          condition: condition,
           status: ListingStatus.pending,
         );
       }
@@ -230,6 +234,8 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
     final subs = categories
         .where((c) => c.parentId == _rootCategoryId)
         .toList();
+    final isServices =
+        _rootCategoryId == MarketKnownCategories.servicesRootId;
 
     return Scaffold(
       appBar: AppBar(
@@ -352,7 +358,9 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               AppTextField(
                 controller: _title,
                 label: 'Название',
-                hint: 'Например, AEG M4 Cyma',
+                hint: isServices
+                    ? 'Например, Ремонт AEG'
+                    : 'Например, AEG M4 Cyma',
                 textInputAction: TextInputAction.next,
                 validator: (v) {
                   if (v == null || v.trim().length < 3) {
@@ -365,12 +373,16 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
               AppTextField(
                 controller: _description,
                 label: 'Описание',
-                hint: 'Состояние, комплектация, нюансы',
+                hint: isServices
+                    ? 'Что входит, сроки, условия'
+                    : 'Состояние, комплектация, нюансы',
                 maxLines: 4,
                 minLines: 3,
                 validator: (v) {
                   if (v == null || v.trim().length < 10) {
-                    return 'Опишите товар подробнее';
+                    return isServices
+                        ? 'Опишите услугу подробнее'
+                        : 'Опишите товар подробнее';
                   }
                   return null;
                 },
@@ -427,21 +439,23 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                   ],
                 ),
               ],
-              const SizedBox(height: 12),
-              Text('Состояние', style: Theme.of(context).textTheme.labelMedium),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final c in ListingCondition.values)
-                    _SelectChip(
-                      label: c.labelRu,
-                      selected: _condition == c,
-                      onTap: () => setState(() => _condition = c),
-                    ),
-                ],
-              ),
+              if (!isServices) ...[
+                const SizedBox(height: 12),
+                Text('Состояние', style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final c in ListingCondition.values)
+                      _SelectChip(
+                        label: c.labelRu,
+                        selected: _condition == c,
+                        onTap: () => setState(() => _condition = c),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               AppTextField(
                 controller: _city,

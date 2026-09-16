@@ -8,6 +8,7 @@ import '../../domain/models/conversation.dart';
 import '../../domain/models/event.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
+import 'organizer_events_providers.dart';
 import 'profile_providers.dart';
 import 'progression_providers.dart';
 import 'repository_providers.dart';
@@ -108,12 +109,14 @@ class EventDetailsNotifier extends FamilyAsyncNotifier<Event, String> {
     );
   }
 
-  Future<void> join() async {
+  Future<void> join(EventSide side) async {
     // 1) Persist participation first — UI updates only after success.
-    final updated = await ref.read(eventRepositoryProvider).join(arg);
+    final updated =
+        await ref.read(eventRepositoryProvider).join(arg, side: side);
     state = AsyncData(updated);
     await ref.read(eventsListProvider.notifier).refresh(silent: true);
     ref.invalidate(conversationsByTypeProvider(ConversationType.event));
+    ref.invalidate(eventParticipantsProvider(arg));
     unawaited(ref.read(folderUnreadProvider.notifier).refresh(silent: true));
 
     // 2) Recalculate XP / level / achievements from live counts.

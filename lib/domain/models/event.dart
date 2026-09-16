@@ -55,6 +55,67 @@ enum AttendanceStatus {
       };
 }
 
+enum EventSide {
+  light,
+  dark;
+
+  static EventSide? fromString(String? value) {
+    switch (value) {
+      case 'light':
+        return EventSide.light;
+      case 'dark':
+        return EventSide.dark;
+      default:
+        return null;
+    }
+  }
+
+  String get dbValue => name;
+
+  String get labelRu => switch (this) {
+        EventSide.light => 'Зелёная команда',
+        EventSide.dark => 'Красная команда',
+      };
+
+  String get teamTitleRu => switch (this) {
+        EventSide.light => 'ЗЕЛЁНАЯ КОМАНДА',
+        EventSide.dark => 'КРАСНАЯ КОМАНДА',
+      };
+
+  String get assetImage => switch (this) {
+        EventSide.light => 'assets/images/side_green.jpg',
+        EventSide.dark => 'assets/images/side_red.jpg',
+      };
+}
+
+class EventImage {
+  const EventImage({
+    required this.id,
+    required this.eventId,
+    required this.url,
+    required this.sortOrder,
+    this.createdAt,
+  });
+
+  final String id;
+  final String eventId;
+  final String url;
+  final int sortOrder;
+  final DateTime? createdAt;
+
+  factory EventImage.fromJson(Map<String, dynamic> json) {
+    return EventImage(
+      id: json['id'] as String,
+      eventId: json['event_id'] as String,
+      url: json['url'] as String,
+      sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
 class Event {
   const Event({
     required this.id,
@@ -65,16 +126,30 @@ class Event {
     required this.eventDate,
     this.organizerId,
     this.organizerNickname,
+    this.assistantUserId,
+    this.assistantNickname,
     required this.maxParticipants,
     this.imageUrl,
     this.status = EventStatus.active,
     required this.createdAt,
     this.updatedAt,
+    this.finishedAt,
+    this.reportWinner,
+    this.reportScoreLight,
+    this.reportScoreDark,
+    this.reportSubmittedAt,
     this.participantsCount = 0,
+    this.lightParticipantsCount = 0,
+    this.darkParticipantsCount = 0,
     this.isParticipating = false,
     this.polygonId,
     this.latitude,
     this.longitude,
+    this.rulesId,
+    this.rulesText = '',
+    this.radioFrequency = '',
+    this.mySide,
+    this.images = const [],
   });
 
   final String id;
@@ -85,18 +160,67 @@ class Event {
   final DateTime eventDate;
   final String? organizerId;
   final String? organizerNickname;
+  final String? assistantUserId;
+  final String? assistantNickname;
   final int maxParticipants;
   final String? imageUrl;
   final EventStatus status;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final DateTime? finishedAt;
+  final String? reportWinner;
+  final int? reportScoreLight;
+  final int? reportScoreDark;
+  final DateTime? reportSubmittedAt;
   final int participantsCount;
+  final int lightParticipantsCount;
+  final int darkParticipantsCount;
   final bool isParticipating;
   final String? polygonId;
   final double? latitude;
   final double? longitude;
+  final String? rulesId;
+  final String rulesText;
+  final String radioFrequency;
+  final EventSide? mySide;
+  final List<EventImage> images;
 
   bool get hasMapPoint => latitude != null && longitude != null;
+
+  bool get hasRules => rulesText.trim().isNotEmpty;
+
+  bool get hasRadioFrequency => radioFrequency.trim().isNotEmpty;
+
+  bool get hasReport => reportSubmittedAt != null;
+
+  bool get needsReport =>
+      status == EventStatus.finished && reportSubmittedAt == null;
+
+  /// Kept for helpers; public feed no longer shows finished events.
+  /// Event chat remains ~3 days after finish (server-side).
+  bool get isWithinFinishedWindow {
+    if (status != EventStatus.finished) return status == EventStatus.active;
+    final at = finishedAt ?? updatedAt ?? createdAt;
+    return DateTime.now().toUtc().difference(at.toUtc()) <=
+        const Duration(days: 3);
+  }
+
+  bool isManager(String? userId) {
+    if (userId == null) return false;
+    return userId == organizerId || userId == assistantUserId;
+  }
+
+  bool isOrganizerOwner(String? userId) =>
+      userId != null && userId == organizerId;
+
+  List<String> get galleryUrls {
+    if (images.isNotEmpty) {
+      return [for (final i in images) if (i.url.trim().isNotEmpty) i.url];
+    }
+    final cover = imageUrl?.trim();
+    if (cover != null && cover.isNotEmpty) return [cover];
+    return const [];
+  }
 
   int get slotsLeft =>
       (maxParticipants - participantsCount).clamp(0, maxParticipants);
@@ -119,13 +243,28 @@ class Event {
 
   Event copyWith({
     int? participantsCount,
+    int? lightParticipantsCount,
+    int? darkParticipantsCount,
     bool? isParticipating,
     String? organizerNickname,
+    String? assistantUserId,
+    String? assistantNickname,
     String? imageUrl,
     EventStatus? status,
+    DateTime? finishedAt,
+    String? reportWinner,
+    int? reportScoreLight,
+    int? reportScoreDark,
+    DateTime? reportSubmittedAt,
     String? polygonId,
     double? latitude,
     double? longitude,
+    String? rulesId,
+    String? rulesText,
+    String? radioFrequency,
+    EventSide? mySide,
+    bool clearMySide = false,
+    List<EventImage>? images,
   }) {
     return Event(
       id: id,
@@ -136,16 +275,32 @@ class Event {
       eventDate: eventDate,
       organizerId: organizerId,
       organizerNickname: organizerNickname ?? this.organizerNickname,
+      assistantUserId: assistantUserId ?? this.assistantUserId,
+      assistantNickname: assistantNickname ?? this.assistantNickname,
       maxParticipants: maxParticipants,
       imageUrl: imageUrl ?? this.imageUrl,
       status: status ?? this.status,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      finishedAt: finishedAt ?? this.finishedAt,
+      reportWinner: reportWinner ?? this.reportWinner,
+      reportScoreLight: reportScoreLight ?? this.reportScoreLight,
+      reportScoreDark: reportScoreDark ?? this.reportScoreDark,
+      reportSubmittedAt: reportSubmittedAt ?? this.reportSubmittedAt,
       participantsCount: participantsCount ?? this.participantsCount,
+      lightParticipantsCount:
+          lightParticipantsCount ?? this.lightParticipantsCount,
+      darkParticipantsCount:
+          darkParticipantsCount ?? this.darkParticipantsCount,
       isParticipating: isParticipating ?? this.isParticipating,
       polygonId: polygonId ?? this.polygonId,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      rulesId: rulesId ?? this.rulesId,
+      rulesText: rulesText ?? this.rulesText,
+      radioFrequency: radioFrequency ?? this.radioFrequency,
+      mySide: clearMySide ? null : (mySide ?? this.mySide),
+      images: images ?? this.images,
     );
   }
 
@@ -180,6 +335,17 @@ class Event {
       organizerNick = json['organizer_nickname'] as String?;
     }
 
+    String? assistantNick;
+    final assistant = json['assistant'];
+    if (assistant is Map) {
+      assistantNick = assistant['nickname'] as String?;
+    } else if (assistant is List && assistant.isNotEmpty) {
+      final first = assistant.first;
+      if (first is Map) {
+        assistantNick = first['nickname'] as String?;
+      }
+    }
+
     return Event(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -189,6 +355,8 @@ class Event {
       eventDate: DateTime.parse(json['event_date'] as String),
       organizerId: json['organizer_id'] as String?,
       organizerNickname: organizerNick,
+      assistantUserId: json['assistant_user_id'] as String?,
+      assistantNickname: assistantNick,
       maxParticipants: (json['max_participants'] as num).toInt(),
       imageUrl: json['image_url'] as String?,
       status: EventStatus.fromString(json['status'] as String?),
@@ -196,13 +364,39 @@ class Event {
       updatedAt: json['updated_at'] == null
           ? null
           : DateTime.parse(json['updated_at'] as String),
+      finishedAt: json['finished_at'] == null
+          ? null
+          : DateTime.parse(json['finished_at'] as String),
+      reportWinner: json['report_winner'] as String?,
+      reportScoreLight: (json['report_score_light'] as num?)?.toInt(),
+      reportScoreDark: (json['report_score_dark'] as num?)?.toInt(),
+      reportSubmittedAt: json['report_submitted_at'] == null
+          ? null
+          : DateTime.parse(json['report_submitted_at'] as String),
       participantsCount: count,
       isParticipating: isParticipating ?? false,
       polygonId: json['polygon_id'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      rulesId: json['rules_id'] as String?,
+      rulesText: json['rules_text'] as String? ?? '',
+      radioFrequency: json['radio_frequency'] as String? ?? '',
+      images: _parseEventImages(json),
     );
   }
+}
+
+List<EventImage> _parseEventImages(Map<String, dynamic> json) {
+  final raw = json['event_images'] ?? json['images'];
+  if (raw is! List) return const [];
+  final list = <EventImage>[];
+  for (final row in raw) {
+    if (row is Map) {
+      list.add(EventImage.fromJson(Map<String, dynamic>.from(row)));
+    }
+  }
+  list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  return list;
 }
 
 class EventParticipant {
@@ -219,6 +413,7 @@ class EventParticipant {
     this.city,
     this.avatarUrl,
     this.publicQrId,
+    this.side,
   });
 
   final String id;
@@ -233,6 +428,7 @@ class EventParticipant {
   final String? city;
   final String? avatarUrl;
   final String? publicQrId;
+  final EventSide? side;
 
   bool get isConfirmed => attendanceStatus == AttendanceStatus.confirmed;
 
@@ -266,6 +462,7 @@ class EventParticipant {
           profile?['avatar_url'] as String? ?? json['avatar_url'] as String?,
       publicQrId: profile?['public_qr_id'] as String? ??
           json['public_qr_id'] as String?,
+      side: EventSide.fromString(json['side'] as String?),
     );
   }
 
@@ -273,6 +470,7 @@ class EventParticipant {
     AttendanceStatus? attendanceStatus,
     DateTime? attendedAt,
     String? confirmedBy,
+    EventSide? side,
   }) {
     return EventParticipant(
       id: id,
@@ -287,6 +485,7 @@ class EventParticipant {
       city: city,
       avatarUrl: avatarUrl,
       publicQrId: publicQrId,
+      side: side ?? this.side,
     );
   }
 }

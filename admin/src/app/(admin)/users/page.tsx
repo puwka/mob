@@ -93,7 +93,7 @@ export default function UsersPage() {
           value={clanId}
           onChange={(e) => setClanId(e.target.value)}
         >
-          <option value="">Клан: все</option>
+          <option value="">Команда: все</option>
           {(clansQuery.data ?? []).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}

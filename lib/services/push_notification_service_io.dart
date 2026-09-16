@@ -23,7 +23,7 @@ class PushNotificationService {
   static const _androidChannel = AndroidNotificationChannel(
     'moystrikbol_default',
     'Уведомления',
-    description: 'Сообщения, игры и дейтинг',
+    description: 'Сообщения, игры и дружба',
     importance: Importance.high,
   );
 
@@ -60,10 +60,7 @@ class PushNotificationService {
     );
     await _local.initialize(
       const InitializationSettings(android: androidInit, iOS: iosInit),
-      onDidReceiveNotificationResponse: (response) {
-        final loc = _locationFromPayload(response.payload);
-        if (loc != null) onOpenLocation?.call(loc);
-      },
+      onDidReceiveNotificationResponse: _onLocalNotificationResponse,
     );
 
     if (Platform.isAndroid) {
@@ -111,6 +108,16 @@ class PushNotificationService {
     if (initial != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _handleOpen(initial);
+      });
+    }
+
+    // Cold start from a local (foreground-posted) notification.
+    final launch = await _local.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true &&
+        launch?.notificationResponse != null &&
+        initial == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onLocalNotificationResponse(launch!.notificationResponse!);
       });
     }
 
@@ -174,9 +181,10 @@ class PushNotificationService {
     final title = n?.title ?? message.data['title'] as String? ?? 'Уведомление';
     final body = n?.body ?? message.data['body'] as String? ?? '';
     final payload = _encodePayload(message.data);
+    final id = _notificationIdFor(message.data, fallback: message);
 
     await _local.show(
-      message.hashCode,
+      id,
       title,
       body,
       NotificationDetails(
@@ -187,6 +195,8 @@ class PushNotificationService {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
+          autoCancel: true,
+          tag: _tagFor(message.data),
         ),
         iOS: const DarwinNotificationDetails(),
       ),
@@ -194,10 +204,38 @@ class PushNotificationService {
     );
   }
 
+  void _onLocalNotificationResponse(NotificationResponse response) {
+    unawaited(_dismissLocal(response.id, response.payload));
+    final data = _dataFromPayload(response.payload);
+    unawaited(_markSeen(data));
+    final loc = _locationFromData(data);
+    if (loc != null) onOpenLocation?.call(loc);
+  }
+
   void _handleOpen(RemoteMessage message) {
+    unawaited(_dismissLocal(
+      _notificationIdFor(message.data, fallback: message),
+      _encodePayload(message.data),
+    ));
     final loc = _locationFromData(message.data);
     if (loc != null) onOpenLocation?.call(loc);
     unawaited(_markSeen(message.data));
+  }
+
+  Future<void> _dismissLocal(int? id, String? payload) async {
+    try {
+      if (id != null) {
+        await _local.cancel(id);
+        final tag = _tagFor(_dataFromPayload(payload));
+        if (tag != null && Platform.isAndroid) {
+          await _local.cancel(id, tag: tag);
+        }
+      }
+      // Clear remaining local banners — user opened the app from a push.
+      await _local.cancelAll();
+    } catch (e) {
+      debugPrint('[PUSH] dismiss local: $e');
+    }
   }
 
   Future<void> _markSeen(Map<String, dynamic> data) async {
@@ -222,15 +260,33 @@ class PushNotificationService {
     }
   }
 
-  String? _locationFromPayload(String? payload) {
-    if (payload == null || payload.isEmpty) return null;
-    final parts = <String, String>{};
+  int _notificationIdFor(
+    Map<String, dynamic> data, {
+    RemoteMessage? fallback,
+  }) {
+    final id = data['notification_id']?.toString();
+    if (id != null && id.isNotEmpty) return id.hashCode & 0x7fffffff;
+    final mid = fallback?.messageId;
+    if (mid != null && mid.isNotEmpty) return mid.hashCode & 0x7fffffff;
+    return (fallback?.hashCode ?? data.hashCode) & 0x7fffffff;
+  }
+
+  String? _tagFor(Map<String, dynamic> data) {
+    final id = data['notification_id']?.toString();
+    if (id == null || id.isEmpty) return null;
+    return 'n_$id';
+  }
+
+  Map<String, dynamic> _dataFromPayload(String? payload) {
+    if (payload == null || payload.isEmpty) return {};
+    final parts = <String, dynamic>{};
     for (final chunk in payload.split('&')) {
       final i = chunk.indexOf('=');
       if (i <= 0) continue;
-      parts[chunk.substring(0, i)] = Uri.decodeComponent(chunk.substring(i + 1));
+      parts[chunk.substring(0, i)] =
+          Uri.decodeComponent(chunk.substring(i + 1));
     }
-    return _locationFromData(parts);
+    return parts;
   }
 
   String _encodePayload(Map<String, dynamic> data) {
@@ -260,6 +316,8 @@ class PushNotificationService {
         if (conversationId.isNotEmpty) return '/main/chats/$conversationId';
         return '/main/profile/dating/matches';
       default:
+        final loc = data['location']?.toString();
+        if (loc != null && loc.startsWith('/')) return loc;
         return null;
     }
   }

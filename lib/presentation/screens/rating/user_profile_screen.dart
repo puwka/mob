@@ -98,13 +98,13 @@ class UserProfileScreen extends ConsumerWidget {
                           child: clanAsync.when(
                             loading: () => const _InfoCell(
                               icon: Icons.shield_outlined,
-                              label: 'Клан',
+                              label: 'Команда',
                               value: '…',
                             ),
                             error: (_, _) => const _InfoCell(
                               icon: Icons.shield_outlined,
-                              label: 'Клан',
-                              value: 'Без клана',
+                              label: 'Команда',
+                              value: 'Без команды',
                             ),
                             data: (clan) => InkWell(
                               onTap: clan == null
@@ -115,8 +115,8 @@ class UserProfileScreen extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(8),
                               child: _InfoCell(
                                 icon: Icons.shield_outlined,
-                                label: 'Клан',
-                                value: clan?.name ?? 'Без клана',
+                                label: 'Команда',
+                                value: clan?.name ?? 'Без команды',
                               ),
                             ),
                           ),

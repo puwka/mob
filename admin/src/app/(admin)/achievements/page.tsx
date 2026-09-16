@@ -70,6 +70,7 @@ export default function AchievementsPage() {
                 <th>Название</th>
                 <th>Тип</th>
                 <th>Условие</th>
+                <th>Награда XP</th>
                 <th>Иконка</th>
                 <th>Активно</th>
                 <th></th>
@@ -92,6 +93,9 @@ export default function AchievementsPage() {
                   </td>
                   <td className="font-mono text-[12px]">
                     ≥ {formatNumber(a.required_value)}
+                  </td>
+                  <td className="font-mono text-[12px] text-lime">
+                    +{formatNumber(a.reward_xp ?? 0)}
                   </td>
                   <td className="text-[12px]">
                     {/^https?:\/\//i.test(a.icon) ? (
@@ -123,7 +127,11 @@ export default function AchievementsPage() {
                         variant="danger"
                         className="h-7 px-2 text-[12px]"
                         onClick={() => {
-                          if (confirm("Удалить достижение?"))
+                          if (
+                            confirm(
+                              "Скрыть достижение из каталога? Уже выданные игрокам награды сохранятся.",
+                            )
+                          )
                             delMut.mutate(a.id);
                         }}
                       >
@@ -169,6 +177,7 @@ function AchievementForm({
   const [requiredValue, setRequiredValue] = useState(
     initial?.required_value ?? 10,
   );
+  const [rewardXp, setRewardXp] = useState(initial?.reward_xp ?? 100);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [iconUrl, setIconUrl] = useState<string | null>(() => {
     const v = initial?.icon ?? "";
@@ -213,7 +222,19 @@ function AchievementForm({
             min={1}
             value={requiredValue}
             onChange={(e) => setRequiredValue(Number(e.target.value))}
+            placeholder="Нужное значение"
           />
+          <input
+            className="admin-input"
+            type="number"
+            min={0}
+            value={rewardXp}
+            onChange={(e) => setRewardXp(Number(e.target.value))}
+            placeholder="Награда XP"
+          />
+          <p className="text-[11px] text-graphite-600">
+            XP начисляется один раз при получении достижения.
+          </p>
           <input
             className="admin-input"
             placeholder="Ключ иконки (veteran, activist…)"
@@ -257,6 +278,7 @@ function AchievementForm({
                     icon,
                     type,
                     requiredValue,
+                    rewardXp,
                     isActive,
                   });
                   await onSaved();

@@ -343,6 +343,7 @@ export type AchievementRow = {
   icon: string;
   type: string;
   required_value: number;
+  reward_xp: number;
   is_active: boolean;
   created_at: string;
 };
@@ -359,6 +360,7 @@ export const upsertAchievement = (p: Record<string, unknown>) =>
     p_type: p.type ?? null,
     p_required_value: p.requiredValue ?? null,
     p_is_active: p.isActive ?? null,
+    p_reward_xp: p.rewardXp ?? null,
   });
 
 export const deleteAchievement = (id: string) =>

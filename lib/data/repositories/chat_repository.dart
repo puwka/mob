@@ -23,6 +23,14 @@ class ChatRepository {
       final uid = _uid;
       if (uid == null) throw const AppException('Требуется авторизация');
 
+      if (type == ConversationType.support) {
+        try {
+          await _client
+              .rpc('ensure_admin_support_inbox')
+              .timeout(const Duration(seconds: 8));
+        } catch (_) {}
+      }
+
       final memberships = await _client
           .from('conversation_members')
           .select('conversation_id, last_read_at, hidden_at')
@@ -47,7 +55,8 @@ class ChatRepository {
       final convRows = await _client
           .from('conversations')
           .select(
-            'id, type, title, listing_id, clan_id, clan_channel, created_at, updated_at',
+            'id, type, title, listing_id, clan_id, clan_channel, '
+            'support_requester_id, created_at, updated_at',
           )
           .eq('type', type.name)
           .inFilter('id', convIds)
@@ -128,6 +137,18 @@ class ChatRepository {
                 .length;
           }
           lastText = n > 1 ? '$n фото' : 'Фото';
+        } else if ((last['message_type'] as String?) == 'video') {
+          lastText = 'Видео';
+        } else if ((last['message_type'] as String?) == 'listing') {
+          lastText = 'Объявление';
+        } else if ((last['message_type'] as String?) == 'event') {
+          lastText = 'Мероприятие';
+        } else if ((last['message_type'] as String?) == 'profile') {
+          lastText = 'Профиль';
+        } else if ((last['message_type'] as String?) == 'event_report') {
+          lastText = 'Итоги игры';
+        } else if ((last['message_type'] as String?) == 'system') {
+          lastText = last['text'] as String? ?? 'Системное сообщение';
         } else {
           lastText = last['text'] as String?;
         }
@@ -157,7 +178,8 @@ class ChatRepository {
     final peerFut = () async {
       if (convType != ConversationType.user &&
           convType != ConversationType.market &&
-          convType != ConversationType.dating) {
+          convType != ConversationType.dating &&
+          convType != ConversationType.support) {
         return (
           id: null as String?,
           nick: null as String?,
@@ -171,7 +193,6 @@ class ChatRepository {
             .select('user_id')
             .eq('conversation_id', id)
             .neq('user_id', uid)
-            .limit(1)
             .timeout(const Duration(seconds: 8));
         if ((peers as List).isEmpty) {
           return (
@@ -181,11 +202,26 @@ class ChatRepository {
             seen: null as DateTime?,
           );
         }
-        final peerId = (peers.first as Map)['user_id'] as String;
+
+        String? peerId;
+        if (convType == ConversationType.support) {
+          final ids = [
+            for (final raw in peers as List)
+              (raw as Map)['user_id'] as String,
+          ];
+          peerId = await _resolveSupportPeerId(
+            uid: uid,
+            peerIds: ids,
+            requesterId: c['support_requester_id'] as String?,
+          );
+        } else {
+          peerId = (peers.first as Map)['user_id'] as String;
+        }
+
         final profile = await _client
             .from('profiles')
             .select('nickname, avatar_url, last_seen_at')
-            .eq('id', peerId)
+            .eq('id', peerId!)
             .maybeSingle()
             .timeout(const Duration(seconds: 8));
         DateTime? peerLastSeen;
@@ -287,7 +323,8 @@ class ChatRepository {
       final row = await _client
           .from('conversations')
           .select(
-            'id, type, title, listing_id, clan_id, clan_channel, created_at, updated_at',
+            'id, type, title, listing_id, event_id, clan_id, clan_channel, '
+            'support_requester_id, created_at, updated_at',
           )
           .eq('id', id)
           .single()
@@ -307,16 +344,28 @@ class ChatRepository {
 
       if (type == ConversationType.user ||
           type == ConversationType.market ||
-          type == ConversationType.dating) {
+          type == ConversationType.dating ||
+          type == ConversationType.support) {
         try {
           final peers = await _client
               .from('conversation_members')
               .select('user_id')
               .eq('conversation_id', id)
-              .neq('user_id', uid)
-              .limit(1);
+              .neq('user_id', uid);
           if ((peers as List).isNotEmpty) {
-            peerUserId = (peers.first as Map)['user_id'] as String?;
+            if (type == ConversationType.support) {
+              final ids = [
+                for (final raw in peers as List)
+                  (raw as Map)['user_id'] as String,
+              ];
+              peerUserId = await _resolveSupportPeerId(
+                uid: uid,
+                peerIds: ids,
+                requesterId: c['support_requester_id'] as String?,
+              );
+            } else {
+              peerUserId = (peers.first as Map)['user_id'] as String?;
+            }
             if (peerUserId != null) {
               final profile = await _client
                   .from('profiles')
@@ -360,6 +409,7 @@ class ChatRepository {
         type: type,
         title: c['title'] as String?,
         listingId: listingId,
+        eventId: c['event_id'] as String?,
         clanId: c['clan_id'] as String?,
         clanChannel: channel,
         createdAt: parseSupabaseDateTime(c['created_at']),
@@ -387,7 +437,8 @@ class ChatRepository {
           .from('messages')
           .select(
             'id, conversation_id, sender_id, text, created_at, edited_at, deleted_at, '
-            'message_type, audio_url, audio_duration_ms, image_url, image_urls, reply_to_message_id, '
+            'message_type, audio_url, audio_duration_ms, image_url, image_urls, '
+            'video_url, video_duration_ms, share_ref_id, share_payload, reply_to_message_id, '
             'sender:profiles!messages_sender_id_fkey(nickname, avatar_url)',
           )
           .eq('conversation_id', conversationId);
@@ -418,7 +469,8 @@ class ChatRepository {
             .from('messages')
             .select(
               'id, conversation_id, sender_id, text, created_at, edited_at, deleted_at, '
-              'message_type, audio_url, audio_duration_ms, image_url, image_urls, reply_to_message_id',
+              'message_type, audio_url, audio_duration_ms, image_url, image_urls, '
+              'video_url, video_duration_ms, share_ref_id, share_payload, reply_to_message_id',
             )
             .eq('conversation_id', conversationId);
         if (before != null) {
@@ -671,6 +723,22 @@ class ChatRepository {
     }
   }
 
+  /// Opens (or creates) the current user's support ticket.
+  /// For admins, syncs inbox and may return null if there are no tickets yet.
+  Future<String?> openSupportChat() async {
+    try {
+      final result = await _client
+          .rpc('open_support_chat')
+          .timeout(const Duration(seconds: 15));
+      if (result == null) return null;
+      final id = '$result'.trim();
+      if (id.isEmpty || id == 'null') return null;
+      return id;
+    } catch (e) {
+      throw AppException(_mapChatError(e));
+    }
+  }
+
   Future<String> openClanChat(String clanId) async {
     try {
       final result = await _client.rpc(
@@ -902,6 +970,55 @@ class ChatRepository {
     }
   }
 
+  Future<ChatMessage> sendVideoMessage({
+    required String conversationId,
+    required String videoUrl,
+    int? durationMs,
+    String? replyToMessageId,
+  }) async {
+    try {
+      final row = await _client.rpc(
+        'send_chat_message',
+        params: {
+          'p_conversation_id': conversationId,
+          'p_text': null,
+          'p_message_type': 'video',
+          'p_video_url': videoUrl,
+          if (durationMs != null) 'p_video_duration_ms': durationMs,
+          if (replyToMessageId != null)
+            'p_reply_to_message_id': replyToMessageId,
+        },
+      );
+      return ChatMessage.fromJson(Map<String, dynamic>.from(row as Map));
+    } catch (e) {
+      throw AppException(_mapChatError(e));
+    }
+  }
+
+  Future<ChatMessage> sendShareMessage({
+    required String conversationId,
+    required ChatMessageType type,
+    required String shareRefId,
+  }) async {
+    if (!type.isShare) {
+      throw const AppException('Некорректный тип вложения');
+    }
+    try {
+      final row = await _client.rpc(
+        'send_chat_message',
+        params: {
+          'p_conversation_id': conversationId,
+          'p_text': null,
+          'p_message_type': type.name,
+          'p_share_ref_id': shareRefId,
+        },
+      );
+      return ChatMessage.fromJson(Map<String, dynamic>.from(row as Map));
+    } catch (e) {
+      throw AppException(_mapChatError(e));
+    }
+  }
+
   Future<void> hideConversation(String conversationId) async {
     try {
       await _client.rpc(
@@ -972,6 +1089,39 @@ class ChatRepository {
     return channel;
   }
 
+  /// Customer sees the support bot; staff sees the ticket owner.
+  Future<String?> _resolveSupportPeerId({
+    required String uid,
+    required List<String> peerIds,
+    required String? requesterId,
+  }) async {
+    if (peerIds.isEmpty) return null;
+
+    String? supportId;
+    try {
+      final row = await _client
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'support_user_id')
+          .maybeSingle()
+          .timeout(const Duration(seconds: 5));
+      supportId = row?['value'] as String?;
+    } catch (_) {}
+
+    if (requesterId != null && requesterId.isNotEmpty) {
+      if (uid == requesterId) {
+        if (supportId != null && peerIds.contains(supportId)) return supportId;
+        return supportId ?? peerIds.first;
+      }
+      return requesterId;
+    }
+
+    if (supportId != null && peerIds.contains(supportId)) {
+      return supportId;
+    }
+    return peerIds.first;
+  }
+
   String _mapChatError(Object e) {
     final raw = e.toString().toUpperCase();
     if (raw.contains('FLOOD')) {
@@ -984,13 +1134,13 @@ class ChatRepository {
       return 'Укажите город в профиле, чтобы открыть чат города';
     }
     if (raw.contains('NOT_CLAN_MEMBER')) {
-      return 'Вы не состоите в этом клане';
+      return 'Вы не состоите в этой команде';
     }
     if (raw.contains('CHAT_MUTED')) {
       return 'Вам запрещено писать в этот чат (мут)';
     }
     if (raw.contains('NOT_CLAN_OFFICER')) {
-      return 'Чат руководства доступен командованию клана';
+      return 'Чат руководства доступен командованию команды';
     }
     if (raw.contains('LISTING_NOT_FOUND')) {
       return 'Объявление недоступно';
@@ -1001,6 +1151,25 @@ class ChatRepository {
     if (raw.contains('EMPTY_IMAGE')) {
       return 'Не удалось отправить изображение';
     }
+    if (raw.contains('EMPTY_VIDEO')) {
+      return 'Не удалось отправить видео';
+    }
+    if (raw.contains('EMPTY_SHARE') || raw.contains('SHARE_TARGET_NOT_FOUND')) {
+      return 'Не удалось поделиться: объект недоступен';
+    }
+    if (raw.contains('EVENT_CHAT_READONLY')) {
+      return 'Чат завершённого мероприятия доступен только организатору и помощнику';
+    }
+    if (raw.contains('SUPPORT_REPLY_FORBIDDEN')) {
+      return 'В чат поддержки могут писать пользователь и администраторы';
+    }
+    if (raw.contains('SUPPORT_NOT_CONFIGURED')) {
+      return 'Поддержка пока недоступна';
+    }
+    if (raw.contains('MESSAGES_MESSAGE_TYPE_CHECK') ||
+        raw.contains('MESSAGE_TYPE_CHECK')) {
+      return 'Тип сообщения не поддерживается сервером. Обновите миграции.';
+    }
     if (raw.contains('TOO_MANY_IMAGES')) {
       return 'Максимум 10 фото за сообщение';
     }
@@ -1009,6 +1178,9 @@ class ChatRepository {
     }
     if (raw.contains('INVALID_AUDIO_DURATION')) {
       return 'Голосовое слишком короткое или длинное';
+    }
+    if (raw.contains('INVALID_VIDEO_DURATION')) {
+      return 'Видео слишком короткое или длинное (макс. 3 мин)';
     }
     if (raw.contains('EMPTY_MESSAGE')) {
       return 'Введите текст сообщения';

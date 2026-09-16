@@ -65,26 +65,35 @@ class _ListingDetailsScreenState extends ConsumerState<ListingDetailsScreen> {
           async.maybeWhen(
             data: (listing) {
               final isOwner = userId != null && listing.sellerId == userId;
-              if (!isOwner) {
-                return IconButton(
-                  tooltip: 'Избранное',
-                  onPressed: () => ref
-                      .read(listingDetailsProvider(widget.listingId).notifier)
-                      .toggleFavorite(),
-                  icon: Icon(
-                    listing.isFavorite ? Icons.favorite : Icons.favorite_border,
-                    size: 18,
-                    color: listing.isFavorite
-                        ? AppColors.danger
-                        : AppColors.textSecondary,
-                  ),
-                );
-              }
-              return IconButton(
-                tooltip: 'Редактировать',
-                onPressed: () =>
-                    context.push('/main/market/${listing.id}/edit'),
-                icon: const Icon(Icons.edit_outlined, size: 18),
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isOwner)
+                    IconButton(
+                      tooltip: 'Избранное',
+                      onPressed: () => ref
+                          .read(
+                            listingDetailsProvider(widget.listingId).notifier,
+                          )
+                          .toggleFavorite(),
+                      icon: Icon(
+                        listing.isFavorite
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        size: 18,
+                        color: listing.isFavorite
+                            ? AppColors.danger
+                            : AppColors.textSecondary,
+                      ),
+                    )
+                  else
+                    IconButton(
+                      tooltip: 'Редактировать',
+                      onPressed: () =>
+                          context.push('/main/market/${listing.id}/edit'),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                    ),
+                ],
               );
             },
             orElse: () => const SizedBox.shrink(),
@@ -277,10 +286,11 @@ class _ListingDetailsScreenState extends ConsumerState<ListingDetailsScreen> {
                               label: 'Подкатегория',
                               value: listing.categoryName!,
                             ),
-                          _SpecLine(
-                            label: 'Состояние',
-                            value: listing.condition.labelRu,
-                          ),
+                          if (!listing.isServiceListing)
+                            _SpecLine(
+                              label: 'Состояние',
+                              value: listing.condition.labelRu,
+                            ),
                           _SpecLine(label: 'Город', value: listing.city),
                         ],
                       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
@@ -106,7 +107,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 Icon(Icons.groups_outlined, size: 16),
                 SizedBox(width: 4),
                 Text(
-                  'Дейтинг',
+                  'Дружба',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
                 ),
               ],
@@ -575,6 +576,19 @@ class _HeaderBlock extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'В приложении с ${DateFormat('d MMM yyyy', 'ru').format(profile.createdAt.toLocal())}',
+              style: TextStyle(
+                color: AppColors.textTertiary.withValues(alpha: 0.38),
+                fontSize: 9,
+                height: 1.1,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -788,8 +802,8 @@ class _ClanInfoCell extends ConsumerWidget {
       borderRadius: BorderRadius.circular(8),
       child: _InfoCell(
         icon: Icons.shield_outlined,
-        label: 'Клан',
-        value: clan == null ? 'Без клана' : clan.name,
+        label: 'Команда',
+        value: clan == null ? 'Без команды' : clan.name,
       ),
     );
   }

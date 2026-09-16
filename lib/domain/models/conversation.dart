@@ -7,7 +7,8 @@ enum ConversationType {
   clan,
   user,
   city,
-  event;
+  event,
+  support;
 
   static ConversationType fromString(String value) {
     return ConversationType.values.firstWhere(
@@ -18,11 +19,12 @@ enum ConversationType {
 
   String get folderLabel => switch (this) {
         ConversationType.market => 'Барахолка',
-        ConversationType.dating => 'Дейтинг',
-        ConversationType.clan => 'Клан',
+        ConversationType.dating => 'Дружба',
+        ConversationType.clan => 'Команда',
         ConversationType.user => 'Личные',
         ConversationType.city => 'Город',
         ConversationType.event => 'Мероприятия',
+        ConversationType.support => 'Администрация',
       };
 }
 
@@ -82,6 +84,10 @@ class ChatMessage {
     this.audioDurationMs,
     this.imageUrl,
     this.imageUrls = const [],
+    this.videoUrl,
+    this.videoDurationMs,
+    this.shareRefId,
+    this.sharePayload,
     this.replyToMessageId,
     this.replyTo,
     this.senderNickname,
@@ -103,6 +109,10 @@ class ChatMessage {
   final int? audioDurationMs;
   final String? imageUrl;
   final List<String> imageUrls;
+  final String? videoUrl;
+  final int? videoDurationMs;
+  final String? shareRefId;
+  final ChatSharePayload? sharePayload;
   final String? replyToMessageId;
   final ChatReplyPreview? replyTo;
   final String? senderNickname;
@@ -114,6 +124,13 @@ class ChatMessage {
   bool get isDeleted => deletedAt != null;
   bool get isVoice => messageType == ChatMessageType.voice;
   bool get isImage => messageType == ChatMessageType.image;
+  bool get isVideo => messageType == ChatMessageType.video;
+  bool get isShare =>
+      messageType == ChatMessageType.listing ||
+      messageType == ChatMessageType.event ||
+      messageType == ChatMessageType.profile;
+  bool get isSystem => messageType == ChatMessageType.system;
+  bool get isEventReport => messageType == ChatMessageType.eventReport;
 
   /// Prefer album column; fall back to legacy single `image_url`.
   List<String> get resolvedImageUrls {
@@ -141,6 +158,12 @@ class ChatMessage {
       if (n > 1) return '$n фото';
       return 'Фото';
     }
+    if (isVideo) return 'Видео';
+    if (messageType == ChatMessageType.listing) return 'Объявление';
+    if (messageType == ChatMessageType.event) return 'Мероприятие';
+    if (messageType == ChatMessageType.profile) return 'Профиль';
+    if (isSystem) return text.trim().isEmpty ? 'Системное сообщение' : text;
+    if (isEventReport) return 'Итоги игры';
     return text;
   }
 
@@ -156,6 +179,10 @@ class ChatMessage {
     int? audioDurationMs,
     String? imageUrl,
     List<String>? imageUrls,
+    String? videoUrl,
+    int? videoDurationMs,
+    String? shareRefId,
+    ChatSharePayload? sharePayload,
     ChatMessageType? messageType,
     String? text,
     String? replyToMessageId,
@@ -175,6 +202,10 @@ class ChatMessage {
       audioDurationMs: audioDurationMs ?? this.audioDurationMs,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrls: imageUrls ?? this.imageUrls,
+      videoUrl: videoUrl ?? this.videoUrl,
+      videoDurationMs: videoDurationMs ?? this.videoDurationMs,
+      shareRefId: shareRefId ?? this.shareRefId,
+      sharePayload: sharePayload ?? this.sharePayload,
       replyToMessageId: replyToMessageId ?? this.replyToMessageId,
       replyTo: clearReplyTo ? null : (replyTo ?? this.replyTo),
       senderNickname: senderNickname ?? this.senderNickname,
@@ -219,6 +250,12 @@ class ChatMessage {
       }
     }
 
+    ChatSharePayload? share;
+    final shareRaw = json['share_payload'];
+    if (shareRaw is Map) {
+      share = ChatSharePayload.fromJson(Map<String, dynamic>.from(shareRaw));
+    }
+
     return ChatMessage(
       id: json['id'] as String,
       conversationId: json['conversation_id'] as String,
@@ -238,6 +275,10 @@ class ChatMessage {
       audioDurationMs: (json['audio_duration_ms'] as num?)?.toInt(),
       imageUrl: json['image_url'] as String?,
       imageUrls: urls,
+      videoUrl: json['video_url'] as String?,
+      videoDurationMs: (json['video_duration_ms'] as num?)?.toInt(),
+      shareRefId: json['share_ref_id'] as String?,
+      sharePayload: share,
       replyToMessageId: json['reply_to_message_id'] as String?,
       replyTo: reply,
       senderNickname: nick,
@@ -281,6 +322,15 @@ class ChatReplyPreview {
       if (imageCount > 1) return '$imageCount фото';
       return 'Фото';
     }
+    if (messageType == ChatMessageType.video) return 'Видео';
+    if (messageType == ChatMessageType.listing) return 'Объявление';
+    if (messageType == ChatMessageType.event) return 'Мероприятие';
+    if (messageType == ChatMessageType.profile) return 'Профиль';
+    if (messageType == ChatMessageType.system) {
+      final t = text.trim();
+      return t.isEmpty ? 'Системное сообщение' : t;
+    }
+    if (messageType == ChatMessageType.eventReport) return 'Итоги игры';
     final t = text.trim();
     if (t.isEmpty) return 'Сообщение';
     return t;
@@ -335,12 +385,84 @@ class ChatReplyPreview {
 enum ChatMessageType {
   text,
   voice,
-  image;
+  image,
+  video,
+  listing,
+  event,
+  profile,
+  system,
+  eventReport;
 
   static ChatMessageType fromString(String value) {
-    return ChatMessageType.values.firstWhere(
-      (e) => e.name == value,
-      orElse: () => ChatMessageType.text,
+    return switch (value) {
+      'event_report' => ChatMessageType.eventReport,
+      _ => ChatMessageType.values.firstWhere(
+          (e) => e.name == value,
+          orElse: () => ChatMessageType.text,
+        ),
+    };
+  }
+
+  bool get isShare =>
+      this == ChatMessageType.listing ||
+      this == ChatMessageType.event ||
+      this == ChatMessageType.profile;
+
+  String get dbValue => switch (this) {
+        ChatMessageType.eventReport => 'event_report',
+        _ => name,
+      };
+}
+
+/// Snapshot card data for share / report messages.
+class ChatSharePayload {
+  const ChatSharePayload({
+    required this.title,
+    this.subtitle,
+    this.imageUrl,
+    this.price,
+    this.eventDate,
+    this.kind,
+    this.eventTitle,
+    this.winner,
+    this.winnerLabel,
+    this.scoreLight,
+    this.scoreDark,
+  });
+
+  final String title;
+  final String? subtitle;
+  final String? imageUrl;
+  final double? price;
+  final DateTime? eventDate;
+  final String? kind;
+  final String? eventTitle;
+  final String? winner;
+  final String? winnerLabel;
+  final int? scoreLight;
+  final int? scoreDark;
+
+  factory ChatSharePayload.fromJson(Map<String, dynamic> json) {
+    DateTime? eventDate;
+    final rawDate = json['event_date'];
+    if (rawDate != null) {
+      eventDate = tryParseSupabaseDateTime(rawDate) ??
+          DateTime.tryParse(rawDate.toString());
+    }
+    return ChatSharePayload(
+      title: (json['title'] as String?)?.trim().isNotEmpty == true
+          ? (json['title'] as String).trim()
+          : 'Без названия',
+      subtitle: (json['subtitle'] as String?)?.trim(),
+      imageUrl: (json['image_url'] as String?)?.trim(),
+      price: (json['price'] as num?)?.toDouble(),
+      eventDate: eventDate,
+      kind: json['kind'] as String?,
+      eventTitle: (json['event_title'] as String?)?.trim(),
+      winner: json['winner'] as String?,
+      winnerLabel: (json['winner_label'] as String?)?.trim(),
+      scoreLight: (json['score_light'] as num?)?.toInt(),
+      scoreDark: (json['score_dark'] as num?)?.toInt(),
     );
   }
 }
@@ -402,6 +524,9 @@ class ConversationPreview {
     if (type == ConversationType.event) {
       return title ?? 'Мероприятие';
     }
+    if (type == ConversationType.support) {
+      return peerNickname ?? title ?? 'Поддержка';
+    }
     return peerNickname ?? title ?? 'Диалог';
   }
 
@@ -442,6 +567,7 @@ class ConversationDetail {
     required this.type,
     this.title,
     this.listingId,
+    this.eventId,
     this.clanId,
     this.clanChannel,
     required this.createdAt,
@@ -459,6 +585,7 @@ class ConversationDetail {
   final ConversationType type;
   final String? title;
   final String? listingId;
+  final String? eventId;
   final String? clanId;
   final ClanChatChannel? clanChannel;
   final DateTime createdAt;
@@ -486,6 +613,9 @@ class ConversationDetail {
     }
     if (type == ConversationType.event) {
       return title ?? 'Мероприятие';
+    }
+    if (type == ConversationType.support) {
+      return peerNickname ?? title ?? 'Поддержка';
     }
     return peerNickname ?? title ?? 'Диалог';
   }

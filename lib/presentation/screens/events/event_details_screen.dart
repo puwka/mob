@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/event_cover.dart';
 import '../../../domain/models/event.dart';
+import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/events_provider.dart';
 import '../../../presentation/providers/progression_providers.dart';
 import '../../../presentation/screens/map/place_map_screen.dart';
 import '../../../widgets/app_button.dart';
 import '../../../widgets/app_card.dart';
 import '../../../widgets/app_network_image.dart';
+import '../../../widgets/event_side_pick_dialog.dart';
 import '../../../widgets/feedback.dart';
 import '../../../widgets/level_up_overlay.dart';
+import '../../../widgets/photo_lightbox.dart';
 
 class EventDetailsScreen extends ConsumerWidget {
   const EventDetailsScreen({super.key, required this.eventId});
@@ -25,7 +29,9 @@ class EventDetailsScreen extends ConsumerWidget {
     final async = ref.watch(eventDetailsProvider(eventId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Мероприятие')),
+      appBar: AppBar(
+        title: const Text('Мероприятие'),
+      ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
@@ -54,6 +60,7 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
   String? _actionError;
   bool _busy = false;
   int? _levelUpTo;
+  var _photoIndex = 0;
 
   Event get event =>
       ref.watch(eventDetailsProvider(widget.event.id)).valueOrNull ??
@@ -71,7 +78,11 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Достижение: ${item.achievement.title}'),
+          content: Text(
+            item.achievement.rewardXp > 0
+                ? 'Достижение: ${item.achievement.title} · +${item.achievement.rewardXp} XP'
+                : 'Достижение: ${item.achievement.title}',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -81,12 +92,20 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
   }
 
   Future<void> _join() async {
+    final side = await showEventSidePickDialog(
+      context: context,
+      event: event,
+    );
+    if (side == null || !mounted) return;
+
     setState(() {
       _busy = true;
       _actionError = null;
     });
     try {
-      await ref.read(eventDetailsProvider(widget.event.id).notifier).join();
+      await ref
+          .read(eventDetailsProvider(widget.event.id).notifier)
+          .join(side);
       if (!mounted) return;
       _consumeFeedback();
     } catch (e) {
@@ -125,7 +144,10 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
     final e = event;
     final date = DateFormat('d MMMM yyyy', 'ru').format(e.eventDate.toLocal());
     final time = DateFormat('HH:mm', 'ru').format(e.eventDate.toLocal());
-    final canJoin = !e.isParticipating && !e.isFull && !_busy;
+    final canJoin =
+        !e.isParticipating && !e.isFull && !_busy && e.canRegister;
+    final uid = ref.watch(authRepositoryProvider).currentUser?.id;
+    final isManager = e.isManager(uid);
 
     return Stack(
       children: [
@@ -137,25 +159,86 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadii.card),
-                child: AspectRatio(
-                  aspectRatio: EventCoverSpecs.aspectRatio,
-                  child: e.imageUrl == null || e.imageUrl!.isEmpty
-                      ? Container(
-                          color: AppColors.surfaceElevated,
-                          child: const Icon(
-                            Icons.image_outlined,
-                            color: AppColors.textTertiary,
-                          ),
-                        )
-                      : AppNetworkImage(
-                          url: e.imageUrl,
-                          fit: BoxFit.cover,
-                          memCacheWidth: 1200,
-                          debugLabel: 'event-detail',
+              Builder(
+                builder: (context) {
+                  final urls = e.galleryUrls;
+                  final cover = urls.isEmpty
+                      ? null
+                      : urls[_photoIndex.clamp(0, urls.length - 1)];
+                  return Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadii.card),
+                        child: AspectRatio(
+                          aspectRatio: EventCoverSpecs.aspectRatio,
+                          child: cover == null
+                              ? Container(
+                                  color: AppColors.surfaceElevated,
+                                  child: const Icon(
+                                    Icons.image_outlined,
+                                    color: AppColors.textTertiary,
+                                  ),
+                                )
+                              : GestureDetector(
+                                  onTap: () => showPhotoLightbox(
+                                    context,
+                                    urls: urls,
+                                    initialIndex: _photoIndex,
+                                  ),
+                                  child: AppNetworkImage(
+                                    url: cover,
+                                    fit: BoxFit.cover,
+                                    memCacheWidth: 1200,
+                                    debugLabel: 'event-detail',
+                                  ),
+                                ),
                         ),
-                ),
+                      ),
+                      if (urls.length > 1) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 64,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: urls.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(width: 6),
+                            itemBuilder: (context, index) {
+                              final selected = index == _photoIndex;
+                              return GestureDetector(
+                                onTap: () =>
+                                    setState(() => _photoIndex = index),
+                                child: Container(
+                                  width: 64,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.badge,
+                                    ),
+                                    border: Border.all(
+                                      color: selected
+                                          ? AppColors.accent
+                                          : AppColors.border,
+                                      width: selected ? 1.4 : 1,
+                                    ),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: AppNetworkImage(
+                                    url: urls[index],
+                                    fit: BoxFit.cover,
+                                    width: 64,
+                                    height: 64,
+                                    memCacheWidth: 160,
+                                    debugLabel: 'event-thumb',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
               Text(
@@ -164,6 +247,26 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
                       fontSize: 20,
                     ),
               ),
+              if (e.status == EventStatus.finished) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: const Text(
+                    'Завершено',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 e.description,
@@ -172,6 +275,105 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
                       height: 1.4,
                     ),
               ),
+              if (e.hasRadioFrequency) ...[
+                const SizedBox(height: 12),
+                AppCard(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.accentSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.cell_tower_outlined,
+                          color: AppColors.accent,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Частота рации',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              e.radioFrequency.trim(),
+                              style: const TextStyle(
+                                color: AppColors.accent,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (e.hasRules) ...[
+                const SizedBox(height: 12),
+                AppCard(
+                  onTap: () => _openEventRules(context, e.rulesText),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.accentSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.gavel_outlined,
+                          color: AppColors.accent,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Правила',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Открыть правила мероприятия',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.textTertiary,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               AppCard(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -253,17 +455,26 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    color: AppColors.accentSoft,
+                    color: e.mySide == EventSide.dark
+                        ? AppColors.dangerMuted
+                        : AppColors.accentSoft,
                     borderRadius: BorderRadius.circular(AppRadii.button),
                     border: Border.all(
-                      color: AppColors.accent.withValues(alpha: 0.45),
+                      color: (e.mySide == EventSide.dark
+                              ? AppColors.danger
+                              : AppColors.accent)
+                          .withValues(alpha: 0.45),
                     ),
                   ),
                   child: Text(
-                    'Вы участвуете',
+                    e.mySide == null
+                        ? 'Вы участвуете'
+                        : 'Вы участвуете · ${e.mySide!.labelRu}',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: AppColors.accent,
+                          color: e.mySide == EventSide.dark
+                              ? AppColors.danger
+                              : AppColors.accent,
                           fontSize: 13.5,
                         ),
                   ),
@@ -277,10 +488,25 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
                 ),
               ] else
                 AppButton(
-                  label: e.isFull ? 'Мест нет' : 'Участвовать',
+                  label: e.isFull
+                      ? 'Мест нет'
+                      : e.status == EventStatus.finished
+                          ? 'Завершено'
+                          : 'Участвовать',
                   loading: _busy,
                   onPressed: canJoin ? _join : null,
                 ),
+              if (isManager) ...[
+                const SizedBox(height: 8),
+                AppButton(
+                  label: 'Управление',
+                  variant: AppButtonVariant.secondary,
+                  icon: Icons.settings_outlined,
+                  onPressed: () => context.push(
+                    '/main/profile/organizer/events/${e.id}',
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -292,6 +518,65 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
       ],
     );
   }
+}
+
+void _openEventRules(BuildContext context, String rulesText) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+    ),
+    builder: (context) {
+      final height = MediaQuery.sizeOf(context).height * 0.72;
+      return SafeArea(
+        child: SizedBox(
+          height: height,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Правила',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Закрыть',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  child: Text(
+                    rulesText.trim(),
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      height: 1.45,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _Meta extends StatelessWidget {

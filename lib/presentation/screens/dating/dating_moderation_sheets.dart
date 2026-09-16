@@ -12,7 +12,7 @@ Future<bool> confirmBlockUser(BuildContext context) async {
       backgroundColor: AppColors.card,
       title: const Text('Заблокировать?'),
       content: const Text(
-        'Пользователь исчезнет из знакомств и совпадений. '
+        'Пользователь исчезнет из дружбы и совпадений. '
         'Отправка сообщений будет запрещена.',
       ),
       actions: [

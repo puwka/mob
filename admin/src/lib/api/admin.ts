@@ -233,14 +233,63 @@ export async function fetchAuditLogs(limit = 100): Promise<AuditLogRow[]> {
   );
 }
 
+export type UserAchievementAdminRow = {
+  achievement_id: string;
+  title: string;
+  description: string;
+  icon: string;
+  type: string;
+  required_value: number;
+  reward_xp: number;
+  is_active: boolean;
+  progress: number;
+  unlocked: boolean;
+  unlocked_at: string | null;
+  admin_override: "granted" | "revoked" | null;
+  reward_granted: boolean;
+};
+
+export async function fetchUserAchievements(
+  userId: string,
+): Promise<UserAchievementAdminRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("admin_list_user_achievements", {
+    p_user_id: userId,
+  });
+  if (error) mapRpcError(error);
+  return ((data as UserAchievementAdminRow[]) ?? []).map((row) => ({
+    ...row,
+    admin_override: (row.admin_override as UserAchievementAdminRow["admin_override"]) ?? null,
+  }));
+}
+
+export async function grantUserAchievement(
+  userId: string,
+  achievementId: string,
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("admin_grant_user_achievement", {
+    p_user_id: userId,
+    p_achievement_id: achievementId,
+  });
+  if (error) mapRpcError(error);
+}
+
+export async function revokeUserAchievement(
+  userId: string,
+  achievementId: string,
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("admin_revoke_user_achievement", {
+    p_user_id: userId,
+    p_achievement_id: achievementId,
+  });
+  if (error) mapRpcError(error);
+}
+
 export async function fetchUserDetail(userId: string): Promise<{
   user: AdminUserRow | null;
-  achievements: Array<{
-    title: string;
-    unlocked: boolean;
-    progress: number;
-    unlocked_at: string | null;
-  }>;
+  achievements: UserAchievementAdminRow[];
   events: Array<{
     id: string;
     title: string;
@@ -297,12 +346,9 @@ export async function fetchUserDetail(userId: string): Promise<{
     }
   }
 
-  const [{ data: ua }, { data: parts }, { data: wallet }, { data: txs }] =
+  const [achievements, { data: parts }, { data: wallet }, { data: txs }] =
     await Promise.all([
-      supabase
-        .from("user_achievements")
-        .select("progress, unlocked, unlocked_at, achievements(title)")
-        .eq("user_id", userId),
+      fetchUserAchievements(userId),
       supabase
         .from("event_participants")
         .select("attendance_status, registration_status, events(id, title, event_date)")
@@ -324,15 +370,7 @@ export async function fetchUserDetail(userId: string): Promise<{
 
   return {
     user,
-    achievements: (ua ?? []).map((row) => {
-      const ach = row.achievements as unknown as { title?: string } | null;
-      return {
-        title: ach?.title ?? "—",
-        unlocked: Boolean(row.unlocked),
-        progress: Number(row.progress ?? 0),
-        unlocked_at: row.unlocked_at as string | null,
-      };
-    }),
+    achievements,
     events: (parts ?? []).map((row) => {
       const ev = row.events as unknown as {
         id: string;

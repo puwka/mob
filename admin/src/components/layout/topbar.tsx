@@ -65,7 +65,7 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
 
   const sections: Array<{ key: keyof NonNullable<typeof hits>; title: string }> = [
     { key: "users", title: "Пользователи" },
-    { key: "clans", title: "Кланы" },
+    { key: "clans", title: "Команды" },
     { key: "events", title: "Мероприятия" },
     { key: "listings", title: "Объявления" },
   ];
@@ -88,7 +88,7 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
         />
         <input
           className="admin-input h-8 pl-8"
-          placeholder={can("search") ? "Поиск: пользователь, клан, игра…" : "Нет доступа к поиску"}
+          placeholder={can("search") ? "Поиск: пользователь, команда, игра…" : "Нет доступа к поиску"}
           value={q}
           disabled={!can("search")}
           onChange={(e) => setQ(e.target.value)}

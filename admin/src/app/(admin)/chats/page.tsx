@@ -26,7 +26,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const TYPE_LABEL: Record<string, string> = {
   market: "Барахолка",
-  clan: "Кланы",
+  clan: "Команды",
   user: "Пользователи",
   city: "Города",
 };

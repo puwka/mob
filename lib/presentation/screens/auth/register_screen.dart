@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/legal_docs.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/validators.dart';
@@ -29,6 +30,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _checkingNick = false;
+  bool _acceptedAgreements = false;
   String? _nicknameRemoteError;
   String? _formError;
 
@@ -77,6 +79,65 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
+  void _openLegalDoc({required String title, required String body}) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+      ),
+      builder: (context) {
+        final height = MediaQuery.sizeOf(context).height * 0.78;
+        return SizedBox(
+          height: height,
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Закрыть',
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    child: Text(
+                      body.trim(),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     setState(() {
@@ -85,6 +146,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     if (!_formKey.currentState!.validate()) return;
+
+    if (!_acceptedAgreements) {
+      setState(
+        () => _formError =
+            'Нужно принять пользовательское соглашение и политику конфиденциальности',
+      );
+      return;
+    }
 
     final nickOk = await _ensureNicknameUnique();
     if (!nickOk || !mounted) return;
@@ -219,6 +288,97 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           color: AppColors.textTertiary,
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _acceptedAgreements,
+                            activeColor: AppColors.accent,
+                            side: const BorderSide(color: AppColors.border),
+                            onChanged: loading
+                                ? null
+                                : (v) => setState(() {
+                                      _acceptedAgreements = v ?? false;
+                                      if (_acceptedAgreements &&
+                                          _formError != null) {
+                                        _formError = null;
+                                      }
+                                    }),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  'Я принимаю ',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(height: 1.35),
+                                ),
+                                GestureDetector(
+                                  onTap: loading
+                                      ? null
+                                      : () => _openLegalDoc(
+                                            title: LegalDocs.termsTitle,
+                                            body: LegalDocs.termsBody,
+                                          ),
+                                  child: Text(
+                                    'пользовательское соглашение',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: AppColors.accent,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: AppColors.accent,
+                                          height: 1.35,
+                                        ),
+                                  ),
+                                ),
+                                Text(
+                                  ' и ',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(height: 1.35),
+                                ),
+                                GestureDetector(
+                                  onTap: loading
+                                      ? null
+                                      : () => _openLegalDoc(
+                                            title: LegalDocs.privacyTitle,
+                                            body: LegalDocs.privacyBody,
+                                          ),
+                                  child: Text(
+                                    'политику конфиденциальности',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: AppColors.accent,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: AppColors.accent,
+                                          height: 1.35,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     if (_formError != null) ...[
                       const SizedBox(height: 12),

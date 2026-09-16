@@ -120,6 +120,7 @@ class Achievement {
     required this.type,
     required this.requiredValue,
     required this.createdAt,
+    this.rewardXp = 0,
   });
 
   final String id;
@@ -129,6 +130,7 @@ class Achievement {
   final String type;
   final int requiredValue;
   final DateTime createdAt;
+  final int rewardXp;
 
   factory Achievement.fromJson(Map<String, dynamic> json) {
     return Achievement(
@@ -139,6 +141,7 @@ class Achievement {
       type: json['type'] as String,
       requiredValue: (json['required_value'] as num).toInt(),
       createdAt: DateTime.parse(json['created_at'] as String),
+      rewardXp: (json['reward_xp'] as num?)?.toInt() ?? 0,
     );
   }
 }

@@ -25,12 +25,12 @@ export const ACHIEVEMENT_TYPE_OPTIONS = [
   },
   { value: "role_games", label: "Количество сыгранных игр в роли" },
   { value: "messages_sent", label: "Количество сообщений в чатах" },
-  { value: "dating_likes", label: "Количество симпатий в дейтинге" },
+  { value: "dating_likes", label: "Количество симпатий в дружбе" },
   {
     value: "profile_photos",
     label: "Количество фотографий, добавленных в профиль",
   },
-  { value: "clan_joined", label: "Вступление в клан (1 = состоит)" },
+  { value: "clan_joined", label: "Вступление в команду (1 = состоит)" },
   {
     value: "events_attended_confirmed",
     label: "Количество подтверждённых участий в игре",
@@ -76,7 +76,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/organizers", label: "Организаторы", icon: "BadgeCheck", perm: "organizers" },
   { href: "/events", label: "Мероприятия", icon: "CalendarDays", perm: "events" },
   { href: "/attendance", label: "Посещаемость", icon: "QrCode", perm: "attendance" },
-  { href: "/clans", label: "Кланы", icon: "Shield", perm: "clans" },
+  { href: "/clans", label: "Команды", icon: "Shield", perm: "clans" },
   { href: "/ranking", label: "Рейтинг", icon: "Trophy", perm: "ranking" },
   { href: "/market", label: "Барахолка", icon: "Store", perm: "market" },
   { href: "/market/moderation", label: "Модерация", icon: "ShieldCheck", perm: "moderation" },

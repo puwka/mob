@@ -49,7 +49,7 @@ export default function RankingPage() {
     <div>
       <PageHeader
         title="Рейтинг"
-        description="Рейтинг игрока = XP. Рейтинг клана = сумма XP участников."
+        description="Рейтинг игрока = XP. Рейтинг команды = сумма XP участников."
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -63,7 +63,7 @@ export default function RankingPage() {
           variant={tab === "clans" ? "primary" : "ghost"}
           onClick={() => setTab("clans")}
         >
-          Кланы
+          Команды
         </Button>
         <div className="mx-2 h-8 w-px bg-graphite-700" />
         <Button
@@ -169,7 +169,7 @@ export default function RankingPage() {
                 <tr>
                   <th>#</th>
                   <th></th>
-                  <th>Клан</th>
+                  <th>Команда</th>
                   <th>TAG</th>
                   <th>Участники</th>
                   <th>XP</th>
@@ -198,7 +198,7 @@ export default function RankingPage() {
             </table>
           </div>
           <p className="mt-2 text-[12px] text-graphite-600">
-            Рейтинг клана нельзя менять вручную — сумма XP участников
+            Рейтинг команды нельзя менять вручную — сумма XP участников
             пересчитывается автоматически.
           </p>
         </>

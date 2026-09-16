@@ -26,7 +26,6 @@ class MarketScreen extends ConsumerStatefulWidget {
 class _MarketScreenState extends ConsumerState<MarketScreen> {
   final _search = TextEditingController();
   Timer? _debounce;
-  var _showAllCategories = false;
 
   @override
   void dispose() {
@@ -69,17 +68,11 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
   Widget build(BuildContext context) {
     final filters = ref.watch(listingFiltersProvider);
     final listingsAsync = ref.watch(marketListingsProvider);
-    final categoriesAsync = ref.watch(marketCategoriesProvider);
     final profileCity = ref.watch(currentProfileProvider).valueOrNull?.city;
 
     final cityLabel = (filters.city != null && filters.city!.isNotEmpty)
         ? filters.city!
         : (profileCity != null && profileCity.isNotEmpty ? profileCity : 'все');
-
-    final roots =
-        categoriesAsync.valueOrNull?.where((c) => c.isRoot).toList() ??
-            const <MarketCategory>[];
-    final visibleRoots = _showAllCategories ? roots : roots.take(5).toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -93,7 +86,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Барахолка',
+                      'Барахолка-Услуги',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontSize: 18,
                           ),
@@ -161,7 +154,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                         style: const TextStyle(fontSize: 14.5),
                         cursorColor: AppColors.accent,
                         decoration: const InputDecoration(
-                          hintText: 'Поиск по товарам',
+                          hintText: 'Поиск по товарам и услугам',
                           prefixIcon: Icon(
                             Icons.search,
                             size: 18,
@@ -206,47 +199,6 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 36,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: 1 +
-                    visibleRoots.length +
-                    (roots.length > 5 ? 1 : 0),
-                separatorBuilder: (context, index) => const SizedBox(width: 6),
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _CatChip(
-                      label: 'Все',
-                      selected: filters.categoryId == null,
-                      onTap: () => ref
-                          .read(listingFiltersProvider.notifier)
-                          .setCategory(null),
-                    );
-                  }
-                  final rootIndex = index - 1;
-                  if (rootIndex < visibleRoots.length) {
-                    final c = visibleRoots[rootIndex];
-                    return _CatChip(
-                      label: c.name,
-                      selected: filters.categoryId == c.id,
-                      onTap: () => ref
-                          .read(listingFiltersProvider.notifier)
-                          .setCategory(c.id),
-                    );
-                  }
-                  return _CatChip(
-                    label: _showAllCategories ? 'Свернуть' : 'Еще',
-                    selected: false,
-                    onTap: () => setState(
-                      () => _showAllCategories = !_showAllCategories,
-                    ),
-                  );
-                },
               ),
             ),
             const SizedBox(height: 8),
@@ -316,48 +268,6 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CatChip extends StatelessWidget {
-  const _CatChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.accentSoft : AppColors.surfaceElevated,
-      borderRadius: BorderRadius.circular(AppRadii.chip),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadii.chip),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadii.chip),
-            border: Border.all(
-              color: selected ? AppColors.accentDim : AppColors.border,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? AppColors.textPrimary : AppColors.textSecondary,
-            ),
-          ),
         ),
       ),
     );

@@ -7,6 +7,7 @@ import '../../data/repositories/clan_repository.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/dating_repository.dart';
 import '../../data/repositories/event_repository.dart';
+import '../../data/repositories/event_rules_repository.dart';
 import '../../data/repositories/listing_repository.dart';
 import '../../data/repositories/polygon_repository.dart';
 import '../../data/repositories/profile_photo_repository.dart';
@@ -14,6 +15,7 @@ import '../../data/repositories/ranking_repository.dart';
 import '../../services/achievement_service.dart';
 import '../../services/avatar_storage_service.dart';
 import '../../services/chat_image_storage_service.dart';
+import '../../services/chat_video_storage_service.dart';
 import '../../services/chat_voice_storage_service.dart';
 import '../../services/clan_avatar_storage_service.dart';
 import '../../services/event_image_storage_service.dart';
@@ -58,6 +60,10 @@ final polygonRepositoryProvider = Provider<PolygonRepository>((ref) {
   return PolygonRepository(ref.watch(supabaseClientProvider));
 });
 
+final eventRulesRepositoryProvider = Provider<EventRulesRepository>((ref) {
+  return EventRulesRepository(ref.watch(supabaseClientProvider));
+});
+
 final clanAvatarStorageServiceProvider =
     Provider<ClanAvatarStorageService>((ref) {
   return ClanAvatarStorageService(ref.watch(supabaseClientProvider));
@@ -79,6 +85,10 @@ final chatVoiceStorageServiceProvider = Provider<ChatVoiceStorageService>((ref) 
 
 final chatImageStorageServiceProvider = Provider<ChatImageStorageService>((ref) {
   return ChatImageStorageService(ref.watch(supabaseClientProvider));
+});
+
+final chatVideoStorageServiceProvider = Provider<ChatVideoStorageService>((ref) {
+  return ChatVideoStorageService(ref.watch(supabaseClientProvider));
 });
 
 final achievementServiceProvider = Provider<AchievementService>((ref) {

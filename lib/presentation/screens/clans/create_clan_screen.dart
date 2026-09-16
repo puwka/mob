@@ -73,7 +73,7 @@ class _CreateClanScreenState extends ConsumerState<CreateClanScreen> {
     if (level < LevelService.minLevelToCreateClan) {
       setState(() {
         _error =
-            'Создать клан можно с ${LevelService.minLevelToCreateClan} уровня (сейчас $level)';
+            'Создать команду можно с ${LevelService.minLevelToCreateClan} уровня (сейчас $level)';
       });
       return;
     }
@@ -118,7 +118,7 @@ class _CreateClanScreenState extends ConsumerState<CreateClanScreen> {
     final canCreate = level >= LevelService.minLevelToCreateClan;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Создать клан')),
+      appBar: AppBar(title: const Text('Создать команду')),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -135,7 +135,7 @@ class _CreateClanScreenState extends ConsumerState<CreateClanScreen> {
                     border: Border.all(color: AppColors.border),
                   ),
                   child: Text(
-                    'Создание клана доступно с ${LevelService.minLevelToCreateClan} уровня. '
+                    'Создание команды доступно с ${LevelService.minLevelToCreateClan} уровня. '
                     'Ваш уровень: $level.',
                     style: const TextStyle(
                       color: AppColors.textSecondary,
@@ -170,7 +170,7 @@ class _CreateClanScreenState extends ConsumerState<CreateClanScreen> {
               const SizedBox(height: 6),
               const Center(
                 child: Text(
-                  'Эмблема клана',
+                  'Эмблема команды',
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textTertiary,
@@ -221,7 +221,7 @@ class _CreateClanScreenState extends ConsumerState<CreateClanScreen> {
               AppTextField(
                 controller: _description,
                 label: 'Описание',
-                hint: 'О клане, стиле игры',
+                hint: 'О команде, стиле игры',
                 maxLines: 4,
                 minLines: 3,
                 enabled: canCreate && !_loading,
@@ -233,7 +233,7 @@ class _CreateClanScreenState extends ConsumerState<CreateClanScreen> {
               const SizedBox(height: 18),
               AppButton(
                 label: canCreate
-                    ? 'Создать клан'
+                    ? 'Создать команду'
                     : 'Нужен ${LevelService.minLevelToCreateClan} уровень',
                 loading: _loading,
                 onPressed: _loading || !canCreate ? null : _submit,

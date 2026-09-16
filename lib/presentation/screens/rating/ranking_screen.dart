@@ -93,7 +93,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen> {
               child: _SegmentRow(
                 items: const [
                   (RankingEntityTab.players, 'Игроки'),
-                  (RankingEntityTab.clans, 'Кланы'),
+                  (RankingEntityTab.clans, 'Команды'),
                 ],
                 selected: entity,
                 onSelect: (v) =>
@@ -341,13 +341,13 @@ class _ClansBody extends ConsumerWidget {
                       ),
                       const SizedBox(height: 14),
                     ],
-                    const SectionTitle(title: 'Список кланов'),
+                    const SectionTitle(title: 'Список команд'),
                     if (list.isEmpty && top.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 28),
                         child: EmptyStateCard(
                           title: 'Пока пусто',
-                          subtitle: 'В этом рейтинге ещё нет кланов.',
+                          subtitle: 'В этом рейтинге ещё нет команд.',
                         ),
                       )
                     else
@@ -883,7 +883,7 @@ class _StickyClanCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Ваш клан',
+                    'Ваша команда',
                     style: TextStyle(
                       fontSize: 10.5,
                       color: AppColors.textTertiary,

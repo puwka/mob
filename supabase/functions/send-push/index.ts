@@ -148,6 +148,9 @@ async function sendFcm(
             notification: {
               channel_id: 'moystrikbol_default',
               sound: 'default',
+              ...(stringData['notification_id']
+                ? { tag: `n_${stringData['notification_id']}` }
+                : {}),
             },
           },
           apns: {

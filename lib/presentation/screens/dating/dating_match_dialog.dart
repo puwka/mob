@@ -170,7 +170,7 @@ class DatingMatchDialog extends StatelessWidget {
                         style: TextButton.styleFrom(
                           foregroundColor: AppColors.textSecondary,
                         ),
-                        child: const Text('Продолжить дейтинг'),
+                        child: const Text('Продолжить дружбу'),
                       ),
                     ),
                   ],

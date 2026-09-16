@@ -22,7 +22,7 @@ const TYPES = [
   { id: "organizers", label: "Организаторы" },
   { id: "city_users", label: "Пользователи города" },
   { id: "event_participants", label: "Участники мероприятия" },
-  { id: "clan_members", label: "Участники клана" },
+  { id: "clan_members", label: "Участники команды" },
 ] as const;
 
 export default function NotificationsPage() {
@@ -123,7 +123,7 @@ export default function NotificationsPage() {
               value={clanId}
               onChange={(e) => setClanId(e.target.value)}
             >
-              <option value="">Клан</option>
+              <option value="">Команда</option>
               {(clansQ.data ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

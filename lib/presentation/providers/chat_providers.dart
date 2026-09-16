@@ -723,6 +723,82 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  Future<bool> sendVideo({
+    required Uint8List bytes,
+    required String contentType,
+    required String extension,
+    int? durationMs,
+    String? replyToMessageId,
+    ChatReplyPreview? replyTo,
+  }) async {
+    final uid = _ref.read(authRepositoryProvider).currentUser?.id;
+    if (uid == null) return false;
+    if (bytes.isEmpty) return false;
+
+    final me = _ref.read(currentProfileProvider).valueOrNull;
+    final myClanRole = _myClanRoleInChat();
+    final tempId = 'local-video-${DateTime.now().microsecondsSinceEpoch}';
+    final optimistic = ChatMessage(
+      id: tempId,
+      conversationId: conversationId,
+      senderId: uid,
+      text: '',
+      createdAt: DateTime.now().toUtc(),
+      pending: true,
+      messageType: ChatMessageType.video,
+      videoDurationMs: durationMs,
+      senderNickname: me?.nickname,
+      senderAvatarUrl: me?.avatarUrl,
+      senderClanRole: myClanRole,
+      replyToMessageId: replyToMessageId,
+      replyTo: replyTo,
+    );
+
+    state = state.copyWith(
+      messages: _sorted([...state.messages, optimistic]),
+      sending: true,
+      clearError: true,
+    );
+
+    try {
+      final url = await _ref.read(chatVideoStorageServiceProvider).uploadVideo(
+            userId: uid,
+            conversationId: conversationId,
+            bytes: bytes,
+            contentType: contentType,
+            extension: extension,
+          );
+      var saved = await _ref.read(chatRepositoryProvider).sendVideoMessage(
+            conversationId: conversationId,
+            videoUrl: url,
+            durationMs: durationMs,
+            replyToMessageId: replyToMessageId,
+          );
+      saved = await _ref.read(chatRepositoryProvider).enrichSender(
+            saved.copyWith(
+              senderNickname: saved.senderNickname ?? me?.nickname,
+              senderAvatarUrl: saved.senderAvatarUrl ?? me?.avatarUrl,
+              senderClanRole: saved.senderClanRole ?? myClanRole,
+              replyTo: saved.replyTo ?? replyTo,
+            ),
+          );
+      if (!mounted) return true;
+      _replaceOptimistic(tempId, saved);
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        sending: false,
+        error: e is AppException ? e.message : e.toString(),
+        messages: [
+          for (final m in state.messages)
+            if (m.id == tempId) m.copyWith(pending: false, failed: true) else m,
+        ],
+      );
+      return false;
+    }
+  }
+
   ClanRole? _myClanRoleInChat() {
     final detail =
         _ref.read(conversationDetailProvider(conversationId)).valueOrNull;

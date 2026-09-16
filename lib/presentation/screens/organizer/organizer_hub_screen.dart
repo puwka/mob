@@ -91,6 +91,13 @@ class OrganizerHubScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             _OrgTile(
+              icon: Icons.gavel_outlined,
+              title: 'Шаблоны правил',
+              subtitle: 'Правила для мероприятий',
+              onTap: () => context.push('/main/profile/organizer/rules'),
+            ),
+            const SizedBox(height: 8),
+            _OrgTile(
               icon: Icons.add_circle_outline,
               title: 'Создать мероприятие',
               subtitle: 'Новый ивент',

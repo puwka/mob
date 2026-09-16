@@ -1,5 +1,8 @@
 import 'achievement.dart';
 
+/// Sticky admin state on `user_achievements.admin_override`.
+enum AchievementAdminOverride { granted, revoked }
+
 /// Row from `user_achievements`.
 class UserAchievementRecord {
   const UserAchievementRecord({
@@ -9,6 +12,8 @@ class UserAchievementRecord {
     required this.progress,
     required this.unlocked,
     this.unlockedAt,
+    this.adminOverride,
+    this.achievement,
   });
 
   final String id;
@@ -17,8 +22,24 @@ class UserAchievementRecord {
   final int progress;
   final bool unlocked;
   final DateTime? unlockedAt;
+  final AchievementAdminOverride? adminOverride;
+  final Achievement? achievement;
 
   factory UserAchievementRecord.fromJson(Map<String, dynamic> json) {
+    Achievement? embedded;
+    final raw = json['achievement'] ?? json['achievements'];
+    if (raw is Map) {
+      try {
+        embedded = Achievement.fromJson(Map<String, dynamic>.from(raw));
+      } catch (_) {}
+    }
+    final overrideRaw = json['admin_override'] as String?;
+    AchievementAdminOverride? adminOverride;
+    if (overrideRaw == 'granted') {
+      adminOverride = AchievementAdminOverride.granted;
+    } else if (overrideRaw == 'revoked') {
+      adminOverride = AchievementAdminOverride.revoked;
+    }
     return UserAchievementRecord(
       id: json['id'] as String,
       userId: json['user_id'] as String,
@@ -28,6 +49,8 @@ class UserAchievementRecord {
       unlockedAt: json['unlocked_at'] == null
           ? null
           : DateTime.parse(json['unlocked_at'] as String),
+      adminOverride: adminOverride,
+      achievement: embedded,
     );
   }
 

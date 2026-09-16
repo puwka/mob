@@ -17,15 +17,26 @@ class EventRepository {
     location,
     event_date,
     organizer_id,
+    assistant_user_id,
     max_participants,
     image_url,
     status,
     created_at,
     updated_at,
+    finished_at,
+    report_winner,
+    report_score_light,
+    report_score_dark,
+    report_submitted_at,
     polygon_id,
     latitude,
     longitude,
-    organizer:profiles!organizer_id(nickname)
+    rules_id,
+    rules_text,
+    radio_frequency,
+    event_images(id, event_id, url, sort_order, created_at),
+    organizer:profiles!organizer_id(nickname),
+    assistant:profiles!assistant_user_id(nickname)
   ''';
 
   Future<List<Event>> fetchEvents({String? city}) async {
@@ -36,8 +47,9 @@ class EventRepository {
         query = query.eq('city', city);
       }
 
-      // Public feed: active (+ optionally finished later)
-      query = query.inFilter('status', ['active', 'finished']);
+      // Public feed: only active events. Finished leave the list;
+      // event chat stays available for 3 days after finish.
+      query = query.eq('status', 'active');
 
       final rows = await query
           .order('event_date', ascending: true)
@@ -95,45 +107,85 @@ class EventRepository {
 
     final countsFut = () async {
       final counts = <String, int>{};
+      final light = <String, int>{};
+      final dark = <String, int>{};
       try {
         final partRows = await _client
             .from('event_participants')
-            .select('event_id')
+            .select('event_id, side')
             .eq('registration_status', 'registered')
             .inFilter('event_id', ids);
         for (final raw in partRows as List) {
-          final id = (raw as Map)['event_id'] as String;
+          final map = raw as Map;
+          final id = map['event_id'] as String;
           counts[id] = (counts[id] ?? 0) + 1;
+          final side = EventSide.fromString(map['side'] as String?);
+          if (side == EventSide.light) {
+            light[id] = (light[id] ?? 0) + 1;
+          } else if (side == EventSide.dark) {
+            dark[id] = (dark[id] ?? 0) + 1;
+          }
         }
-      } catch (_) {}
-      return counts;
+      } catch (_) {
+        try {
+          final partRows = await _client
+              .from('event_participants')
+              .select('event_id')
+              .eq('registration_status', 'registered')
+              .inFilter('event_id', ids);
+          for (final raw in partRows as List) {
+            final id = (raw as Map)['event_id'] as String;
+            counts[id] = (counts[id] ?? 0) + 1;
+          }
+        } catch (_) {}
+      }
+      return (total: counts, light: light, dark: dark);
     }();
 
     final joinedFut = () async {
-      final joinedIds = <String>{};
-      if (userId == null) return joinedIds;
+      final joined = <String, EventSide?>{};
+      if (userId == null) return joined;
       try {
-        final joined = await _client
+        final rows = await _client
             .from('event_participants')
-            .select('event_id')
+            .select('event_id, side')
             .eq('user_id', userId)
             .eq('registration_status', 'registered')
             .inFilter('event_id', ids);
-        for (final row in joined as List) {
-          joinedIds.add((row as Map)['event_id'] as String);
+        for (final row in rows as List) {
+          final map = row as Map;
+          joined[map['event_id'] as String] =
+              EventSide.fromString(map['side'] as String?);
         }
-      } catch (_) {}
-      return joinedIds;
+      } catch (_) {
+        try {
+          final rows = await _client
+              .from('event_participants')
+              .select('event_id')
+              .eq('user_id', userId)
+              .eq('registration_status', 'registered')
+              .inFilter('event_id', ids);
+          for (final row in rows as List) {
+            joined[(row as Map)['event_id'] as String] = null;
+          }
+        } catch (_) {}
+      }
+      return joined;
     }();
 
     final counts = await countsFut;
-    final joinedIds = await joinedFut;
+    final joined = await joinedFut;
 
     return [
       for (final event in base)
         event.copyWith(
-          participantsCount: counts[event.id] ?? 0,
-          isParticipating: joinedIds.contains(event.id),
+          participantsCount: counts.total[event.id] ?? 0,
+          lightParticipantsCount: counts.light[event.id] ?? 0,
+          darkParticipantsCount: counts.dark[event.id] ?? 0,
+          isParticipating: joined.containsKey(event.id),
+          mySide: joined[event.id],
+          clearMySide:
+              !joined.containsKey(event.id) || joined[event.id] == null,
         ),
     ];
   }
@@ -170,7 +222,7 @@ class EventRepository {
           .from('event_participants')
           .select(
             'id, event_id, user_id, registration_status, attendance_status, '
-            'registered_at, attended_at, confirmed_by, '
+            'registered_at, attended_at, confirmed_by, side, '
             'profile:profiles!user_id(nickname, city, avatar_url, public_qr_id)',
           )
           .eq('event_id', eventId)
@@ -226,6 +278,9 @@ class EventRepository {
     String? polygonId,
     double? latitude,
     double? longitude,
+    String? rulesId,
+    String? rulesText,
+    String? radioFrequency,
   }) async {
     try {
       final result = await _client.rpc(
@@ -242,6 +297,9 @@ class EventRepository {
           'p_polygon_id': polygonId,
           'p_latitude': latitude,
           'p_longitude': longitude,
+          'p_rules_id': rulesId,
+          'p_rules_text': rulesText,
+          'p_radio_frequency': radioFrequency,
         },
       );
       return result as String;
@@ -264,6 +322,11 @@ class EventRepository {
     String? polygonId,
     double? latitude,
     double? longitude,
+    String? rulesId,
+    bool clearRules = false,
+    String? rulesText,
+    bool setRulesText = false,
+    String? radioFrequency,
   }) async {
     try {
       await _client.rpc(
@@ -282,6 +345,11 @@ class EventRepository {
           'p_polygon_id': polygonId,
           'p_latitude': latitude,
           'p_longitude': longitude,
+          'p_rules_id': rulesId,
+          'p_clear_rules': clearRules,
+          'p_rules_text': rulesText,
+          'p_set_rules_text': setRulesText,
+          'p_radio_frequency': radioFrequency,
         },
       );
     } catch (e) {
@@ -291,13 +359,72 @@ class EventRepository {
 
   Future<void> setEventImageUrl({
     required String eventId,
-    required String imageUrl,
+    required String? imageUrl,
   }) async {
     try {
-      await _client
-          .from('events')
-          .update({'image_url': imageUrl})
-          .eq('id', eventId);
+      await _client.from('events').update({
+        'image_url': (imageUrl == null || imageUrl.trim().isEmpty)
+            ? null
+            : imageUrl.trim(),
+      }).eq('id', eventId);
+    } catch (e) {
+      throw AppException(ErrorMapper.map(e));
+    }
+  }
+
+  Future<List<EventImage>> fetchImages(String eventId) async {
+    try {
+      final rows = await _client
+          .from('event_images')
+          .select('id, event_id, url, sort_order, created_at')
+          .eq('event_id', eventId)
+          .order('sort_order', ascending: true);
+      return [
+        for (final raw in rows as List)
+          EventImage.fromJson(Map<String, dynamic>.from(raw as Map)),
+      ];
+    } catch (e) {
+      throw AppException(ErrorMapper.map(e));
+    }
+  }
+
+  Future<EventImage> addEventImage({
+    required String eventId,
+    required String url,
+    required int sortOrder,
+  }) async {
+    try {
+      final row = await _client
+          .from('event_images')
+          .insert({
+            'event_id': eventId,
+            'url': url,
+            'sort_order': sortOrder,
+          })
+          .select('id, event_id, url, sort_order, created_at')
+          .single();
+      return EventImage.fromJson(Map<String, dynamic>.from(row));
+    } catch (e) {
+      throw AppException(_mapEventError(e));
+    }
+  }
+
+  Future<void> deleteEventImage(String imageId) async {
+    try {
+      await _client.from('event_images').delete().eq('id', imageId);
+    } catch (e) {
+      throw AppException(ErrorMapper.map(e));
+    }
+  }
+
+  Future<void> reorderEventImages(List<EventImage> images) async {
+    try {
+      for (var i = 0; i < images.length; i++) {
+        await _client
+            .from('event_images')
+            .update({'sort_order': i})
+            .eq('id', images[i].id);
+      }
     } catch (e) {
       throw AppException(ErrorMapper.map(e));
     }
@@ -328,9 +455,67 @@ class EventRepository {
     }
   }
 
-  Future<Event> join(String eventId) async {
+  Future<Event> setEventAssistant({
+    required String eventId,
+    required String userId,
+  }) async {
     try {
-      await _client.rpc('join_event', params: {'p_event_id': eventId});
+      await _client.rpc(
+        'set_event_assistant',
+        params: {
+          'p_event_id': eventId,
+          'p_user_id': userId,
+        },
+      );
+      return fetchById(eventId);
+    } catch (e) {
+      throw AppException(_mapEventError(e));
+    }
+  }
+
+  Future<Event> clearEventAssistant(String eventId) async {
+    try {
+      await _client.rpc(
+        'clear_event_assistant',
+        params: {'p_event_id': eventId},
+      );
+      return fetchById(eventId);
+    } catch (e) {
+      throw AppException(_mapEventError(e));
+    }
+  }
+
+  Future<Event> submitEventReport({
+    required String eventId,
+    required String winner,
+    required int scoreLight,
+    required int scoreDark,
+  }) async {
+    try {
+      await _client.rpc(
+        'submit_event_report',
+        params: {
+          'p_event_id': eventId,
+          'p_winner': winner,
+          'p_score_light': scoreLight,
+          'p_score_dark': scoreDark,
+        },
+      );
+      return fetchById(eventId);
+    } catch (e) {
+      throw AppException(_mapEventError(e));
+    }
+  }
+
+  Future<Event> join(String eventId, {required EventSide side}) async {
+    try {
+      await _client.rpc(
+        'join_event',
+        params: {
+          'p_event_id': eventId,
+          'p_side': side.dbValue,
+        },
+      );
       return fetchById(eventId);
     } catch (e) {
       throw AppException(_mapEventError(e));
@@ -385,6 +570,7 @@ class EventRepository {
   String _mapEventError(Object e) {
     final msg = '${ErrorMapper.map(e)} $e'.toUpperCase();
     if (msg.contains('NO_SLOTS')) return 'Мест нет';
+    if (msg.contains('INVALID_SIDE')) return 'Выберите сторону';
     if (msg.contains('EVENT_NOT_ACTIVE')) return 'Мероприятие недоступно';
     if (msg.contains('EVENT_FINISHED')) return 'Мероприятие завершено';
     if (msg.contains('EVENT_CANCELLED')) return 'Мероприятие отменено';
@@ -404,8 +590,36 @@ class EventRepository {
     }
     if (msg.contains('INVALID_COORDINATES')) return 'Некорректные координаты';
     if (msg.contains('POLYGON_NOT_FOUND')) return 'Полигон не найден';
+    if (msg.contains('RULES_NOT_FOUND')) return 'Шаблон правил не найден';
+    if (msg.contains('INVALID_RULES_BODY')) {
+      return 'Текст правил слишком длинный';
+    }
+    if (msg.contains('INVALID_RADIO_FREQUENCY')) {
+      return 'Частота рации слишком длинная (макс. 40 символов)';
+    }
+    if (msg.contains('EVENT_IMAGES_LIMIT')) {
+      return 'Слишком много фото для мероприятия';
+    }
     if (msg.contains('LIMIT_BELOW_PARTICIPANTS')) {
       return 'Лимит меньше числа уже записанных участников';
+    }
+    if (msg.contains('NOT_PARTICIPANT')) {
+      return 'Помощником можно назначить только участника';
+    }
+    if (msg.contains('CANNOT_ASSIGN_SELF')) {
+      return 'Нельзя назначить себя помощником';
+    }
+    if (msg.contains('REPORT_ALREADY_SUBMITTED')) {
+      return 'Отчёт уже отправлен';
+    }
+    if (msg.contains('EVENT_NOT_FINISHED')) {
+      return 'Отчёт доступен после завершения';
+    }
+    if (msg.contains('INVALID_WINNER') || msg.contains('INVALID_SCORE')) {
+      return 'Проверьте победителя и счёт';
+    }
+    if (msg.contains('EVENT_CHAT_READONLY')) {
+      return 'Чат завершённого мероприятия доступен только организатору и помощнику';
     }
     return ErrorMapper.map(e);
   }

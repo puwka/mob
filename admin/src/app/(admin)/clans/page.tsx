@@ -47,7 +47,7 @@ export default function ClansPage() {
   const delMut = useMutation({
     mutationFn: deleteClan,
     onSuccess: async () => {
-      setMsg("Клан удалён");
+      setMsg("Команда удалена");
       await qc.invalidateQueries({ queryKey: ["admin-clans"] });
     },
     onError: (e: Error) => setMsg(e.message),
@@ -56,8 +56,8 @@ export default function ClansPage() {
   return (
     <div>
       <PageHeader
-        title="Кланы"
-        description="Рейтинг клана = сумма XP участников (только отображение)"
+        title="Команды"
+        description="Рейтинг команды = сумма XP участников (только отображение)"
         actions={
           <Button type="button" onClick={() => setEditing("new")}>
             Создать
@@ -80,7 +80,7 @@ export default function ClansPage() {
       {listQ.isLoading ? <LoadingBlock /> : null}
       {listQ.error ? <ErrorBlock message={(listQ.error as Error).message} /> : null}
       {!listQ.isLoading && !(listQ.data?.length) ? (
-        <EmptyState message="Кланы не найдены" />
+        <EmptyState message="Команды не найдены" />
       ) : null}
 
       {(listQ.data?.length ?? 0) > 0 ? (
@@ -153,7 +153,7 @@ export default function ClansPage() {
                         variant="danger"
                         className="h-7 px-2 text-[12px]"
                         onClick={() => {
-                          if (confirm("Удалить клан?")) delMut.mutate(c.id);
+                          if (confirm("Удалить команду?")) delMut.mutate(c.id);
                         }}
                       >
                         Удалить
@@ -226,7 +226,7 @@ function ClanMembersPanel({
   return (
     <div className="mt-4 admin-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Состав клана</h3>
+        <h3 className="text-sm font-semibold text-white">Состав команды</h3>
         <Button variant="ghost" className="h-7" onClick={onClose}>
           Закрыть
         </Button>
@@ -345,7 +345,7 @@ function ClanFormModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-lg rounded-lg border border-graphite-700 bg-graphite-900 p-4">
         <h2 className="mb-3 text-sm font-semibold text-white">
-          {initial ? "Редактировать клан" : "Новый клан"}
+          {initial ? "Редактировать команду" : "Новая команда"}
         </h2>
         <div className="space-y-2">
           <input
@@ -390,7 +390,7 @@ function ClanFormModal({
             label="Эмблема"
           />
           <div className="rounded border border-graphite-800 bg-graphite-950/40 px-3 py-2 text-[12px] text-graphite-600">
-            Рейтинг клана считается автоматически как сумма XP участников.
+            Рейтинг команды считается автоматически как сумма XP участников.
             Ручное изменение недоступно.
           </div>
           {!initial || true ? (

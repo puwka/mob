@@ -120,7 +120,7 @@ abstract final class ErrorMapper {
       return 'Ошибка доступа к диалогам. Обновите SQL-миграции.';
     }
     if (blob.contains('NOT ASSIGNED') || blob.contains('V_MATCH')) {
-      return 'Ошибка знакомств на сервере. Примените миграцию 000043.';
+      return 'Ошибка раздела «Дружба» на сервере. Примените миграцию 000043.';
     }
     // Surface actionable server messages (P0001 custom exceptions).
     final msg = e.message.trim();

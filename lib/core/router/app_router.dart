@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/conversation.dart';
+import '../../domain/models/event_rules.dart';
 import '../../domain/models/polygon.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../../presentation/providers/event_rules_providers.dart';
 import '../../presentation/providers/polygon_providers.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
@@ -24,8 +26,11 @@ import '../../presentation/screens/market/listing_details_screen.dart';
 import '../../presentation/screens/market/market_screen.dart';
 import '../../presentation/screens/market/my_listings_screen.dart';
 import '../../presentation/screens/organizer/create_event_screen.dart';
+import '../../presentation/screens/organizer/edit_event_rules_screen.dart';
 import '../../presentation/screens/organizer/edit_polygon_screen.dart';
 import '../../presentation/screens/organizer/event_qr_scanner_screen.dart';
+import '../../presentation/screens/organizer/event_report_screen.dart';
+import '../../presentation/screens/organizer/my_event_rules_screen.dart';
 import '../../presentation/screens/organizer/my_organizer_events_screen.dart';
 import '../../presentation/screens/organizer/my_polygons_screen.dart';
 import '../../presentation/screens/organizer/organizer_balance_screen.dart';
@@ -139,6 +144,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                         'market' => ConversationType.market,
                         'dating' => ConversationType.dating,
                         'event' => ConversationType.event,
+                        'support' => ConversationType.support,
                         _ => ConversationType.market,
                       };
                       return ChatFolderScreen(type: type);
@@ -229,8 +235,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                               .valueOrNull
                               ?.isOrganizer ??
                           false;
-                      if (!isOrg) return '/main/profile';
-                      return null;
+                      if (isOrg) return null;
+                      // Assistants can open event management deep links.
+                      final path = state.uri.path;
+                      if (path.contains('/organizer/events/') &&
+                          !path.endsWith('/events/create') &&
+                          !path.contains('/events/create')) {
+                        return null;
+                      }
+                      return '/main/profile';
                     },
                     builder: (context, state) => const OrganizerHubScreen(),
                     routes: [
@@ -263,6 +276,40 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                                 }
                               }
                               return EditPolygonScreen(initial: found);
+                            },
+                          ),
+                        ],
+                      ),
+                      GoRoute(
+                        path: 'rules',
+                        builder: (context, state) =>
+                            const MyEventRulesScreen(),
+                        routes: [
+                          GoRoute(
+                            path: 'create',
+                            builder: (context, state) =>
+                                const EditEventRulesScreen(),
+                          ),
+                          GoRoute(
+                            path: ':rulesId/edit',
+                            builder: (context, state) {
+                              final extra = state.extra;
+                              if (extra is EventRulesTemplate) {
+                                return EditEventRulesScreen(initial: extra);
+                              }
+                              final id = state.pathParameters['rulesId'];
+                              final list =
+                                  ref.read(myEventRulesProvider).valueOrNull;
+                              EventRulesTemplate? found;
+                              if (id != null && list != null) {
+                                for (final r in list) {
+                                  if (r.id == id) {
+                                    found = r;
+                                    break;
+                                  }
+                                }
+                              }
+                              return EditEventRulesScreen(initial: found);
                             },
                           ),
                         ],
@@ -301,6 +348,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                                 path: 'scanner',
                                 builder: (context, state) =>
                                     EventQrScannerScreen(
+                                  eventId: state.pathParameters['eventId']!,
+                                ),
+                              ),
+                              GoRoute(
+                                path: 'report',
+                                builder: (context, state) => EventReportScreen(
                                   eventId: state.pathParameters['eventId']!,
                                 ),
                               ),

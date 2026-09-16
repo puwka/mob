@@ -1,13 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/chat_date_format.dart';
 import '../../../core/utils/error_mapper.dart';
 import '../../../core/utils/presence.dart';
 import '../../../domain/models/conversation.dart';
+import '../../../domain/models/profile.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/chat_providers.dart';
 import '../../../presentation/providers/clan_providers.dart';
@@ -41,14 +44,26 @@ class DialogsScreen extends ConsumerWidget {
               padding: EdgeInsets.fromLTRB(
                 AppLayout.pageGutter(context),
                 10,
-                AppLayout.pageGutter(context),
+                AppLayout.pageGutter(context) - 4,
                 8,
               ),
-              child: Text(
-                'Диалоги',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontSize: 18,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Диалоги',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontSize: 18,
+                          ),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'Поддержка',
+                    icon: const Icon(Icons.support_agent_outlined),
+                    color: AppColors.textSecondary,
+                    onPressed: () => _openSupport(context, ref),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -146,7 +161,7 @@ class DialogsScreen extends ConsumerWidget {
                           subtitle: myClan?.name ??
                               _folderSubtitle(
                                 unread: unreadMap[ConversationType.clan] ?? 0,
-                                emptyHint: 'Чаты клана',
+                                emptyHint: 'Чаты команды',
                               ),
                           meta: 'Папка',
                           icon: Icons.shield_outlined,
@@ -210,13 +225,93 @@ class DialogsScreen extends ConsumerWidget {
   }
 }
 
-class ChatFolderScreen extends ConsumerWidget {
+Future<void> _openSupport(BuildContext context, WidgetRef ref) async {
+  final role = ref.read(currentProfileProvider).valueOrNull?.badgeRole;
+  final isStaff = role == ProfileBadgeRole.admin;
+  if (isStaff) {
+    if (!context.mounted) return;
+    context.go('/main/chats/folder/support');
+    return;
+  }
+
+  try {
+    final id = await ref.read(chatRepositoryProvider).openSupportChat();
+    if (!context.mounted) return;
+    if (id == null || id.isEmpty) {
+      // Staff inbox empty, or role mismatch on server — show folder.
+      context.go('/main/chats/folder/support');
+      return;
+    }
+    ref.invalidate(conversationsByTypeProvider(ConversationType.support));
+    unawaited(ref.read(folderUnreadProvider.notifier).refresh(silent: true));
+    context.go('/main/chats/$id');
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ErrorMapper.map(e))),
+    );
+  }
+}
+
+class ChatFolderScreen extends ConsumerStatefulWidget {
   const ChatFolderScreen({super.key, required this.type});
 
   final ConversationType type;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatFolderScreen> createState() => _ChatFolderScreenState();
+}
+
+class _ChatFolderScreenState extends ConsumerState<ChatFolderScreen> {
+  var _openingSupport = false;
+
+  ConversationType get type => widget.type;
+
+  @override
+  void initState() {
+    super.initState();
+    if (type == ConversationType.support) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybeAutoOpenSupport();
+      });
+    }
+  }
+
+  Future<void> _maybeAutoOpenSupport() async {
+    if (!mounted || _openingSupport) return;
+    final role = ref.read(currentProfileProvider).valueOrNull?.badgeRole;
+    if (role == ProfileBadgeRole.admin) return;
+
+    final items =
+        ref.read(conversationsByTypeProvider(ConversationType.support)).valueOrNull;
+    if (items != null && items.isNotEmpty) {
+      // Regular user already has a ticket — open it.
+      context.go('/main/chats/${items.first.id}');
+      return;
+    }
+
+    setState(() => _openingSupport = true);
+    try {
+      final id = await ref.read(chatRepositoryProvider).openSupportChat();
+      if (!mounted) return;
+      if (id == null || id.isEmpty) {
+        setState(() => _openingSupport = false);
+        return;
+      }
+      ref.invalidate(conversationsByTypeProvider(ConversationType.support));
+      unawaited(ref.read(folderUnreadProvider.notifier).refresh(silent: true));
+      context.go('/main/chats/$id');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _openingSupport = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ErrorMapper.map(e))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(conversationsByTypeProvider(type));
     final myClan = type == ConversationType.clan
         ? ref.watch(myClanProvider).valueOrNull
@@ -224,6 +319,10 @@ class ChatFolderScreen extends ConsumerWidget {
     final myCity = type == ConversationType.city
         ? ref.watch(currentProfileProvider).valueOrNull?.city.trim()
         : null;
+    final isAdmin = ref.watch(currentProfileProvider).valueOrNull?.badgeRole ==
+        ProfileBadgeRole.admin;
+    final showSupportCta =
+        type == ConversationType.support && !isAdmin;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -242,6 +341,22 @@ class ChatFolderScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/main/chats'),
         ),
+        actions: [
+          if (showSupportCta)
+            IconButton(
+              tooltip: 'Написать в поддержку',
+              icon: _openingSupport
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.support_agent_outlined),
+              onPressed: _openingSupport
+                  ? null
+                  : () => _openSupport(context, ref),
+            ),
+        ],
       ),
       body: AppPageBody(
         child: async.when(
@@ -261,6 +376,15 @@ class ChatFolderScreen extends ConsumerWidget {
         ),
         data: (items) {
           if (items.isEmpty) {
+            if (showSupportCta && _openingSupport) {
+              return const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.all(AppLayout.pageGutter(context)),
@@ -271,14 +395,30 @@ class ChatFolderScreen extends ConsumerWidget {
                   subtitle: type == ConversationType.market
                       ? 'Нажмите «Написать» на объявлении.'
                       : type == ConversationType.dating
-                          ? 'Совпадения из дейтинга появятся здесь.'
+                          ? 'Совпадения из дружбы появятся здесь.'
                           : type == ConversationType.city
                               ? 'Укажите город в профиле — чат откроется автоматически.'
                               : type == ConversationType.event
                                   ? 'Создайте игру или нажмите «Участвовать» — чат появится здесь.'
-                                  : 'Вступите в клан, чтобы открыть чаты.',
-                  icon: Icons.chat_bubble_outline,
+                                  : type == ConversationType.support
+                                      ? (isAdmin
+                                          ? 'Обращения пользователей появятся здесь.'
+                                          : 'Нажмите кнопку ниже, чтобы написать в поддержку.')
+                                      : 'Вступите в команду, чтобы открыть чаты.',
+                  icon: type == ConversationType.support
+                      ? Icons.support_agent_outlined
+                      : Icons.chat_bubble_outline,
                 ),
+                if (showSupportCta) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: _openingSupport
+                        ? null
+                        : () => _openSupport(context, ref),
+                    icon: const Icon(Icons.support_agent_outlined),
+                    label: const Text('Написать в поддержку'),
+                  ),
+                ],
               ],
             );
           }
@@ -728,14 +868,5 @@ class _DialogTile extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime dt) {
-    final local = dt.toLocal();
-    final now = DateTime.now();
-    if (local.year == now.year &&
-        local.month == now.month &&
-        local.day == now.day) {
-      return DateFormat('HH:mm').format(local);
-    }
-    return DateFormat('d MMM', 'ru').format(local);
-  }
+  String _formatTime(DateTime dt) => ChatDateFormat.dialogList(dt);
 }

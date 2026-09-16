@@ -38,18 +38,36 @@ class AchievementRepository {
   }
 
   Future<List<UserAchievementRecord>> fetchUserRecords(String userId) async {
-    final rows = await _client
-        .from('user_achievements')
-        .select()
-        .eq('user_id', userId);
+    try {
+      final rows = await _client
+          .from('user_achievements')
+          .select(
+            'id, user_id, achievement_id, progress, unlocked, unlocked_at, '
+            'admin_override, achievement:achievements(*)',
+          )
+          .eq('user_id', userId);
 
-    return (rows as List)
-        .map(
-          (e) => UserAchievementRecord.fromJson(
-            Map<String, dynamic>.from(e as Map),
-          ),
-        )
-        .toList();
+      return (rows as List)
+          .map(
+            (e) => UserAchievementRecord.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      final rows = await _client
+          .from('user_achievements')
+          .select()
+          .eq('user_id', userId);
+
+      return (rows as List)
+          .map(
+            (e) => UserAchievementRecord.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .toList();
+    }
   }
 
   Future<AchievementMetrics> fetchMetrics(String userId) async {

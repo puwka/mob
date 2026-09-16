@@ -202,8 +202,8 @@ void main() {
   group('Integration models', () {
     test('conversation folder labels match dialogs UI', () {
       expect(ConversationType.market.folderLabel, 'Барахолка');
-      expect(ConversationType.dating.folderLabel, 'Знакомства');
-      expect(ConversationType.clan.folderLabel, 'Клан');
+      expect(ConversationType.dating.folderLabel, 'Дружба');
+      expect(ConversationType.clan.folderLabel, 'Команда');
       expect(ConversationType.user.folderLabel, 'Личные');
       expect(ConversationType.city.folderLabel, 'Город');
     });

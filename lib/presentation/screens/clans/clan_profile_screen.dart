@@ -33,7 +33,7 @@ class ClanProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Клан'),
+        title: const Text('Команда'),
         actions: [
           if (myRole != null)
             PopupMenuButton<String>(
@@ -58,7 +58,7 @@ class ClanProfileScreen extends ConsumerWidget {
                     context: context,
                     builder: (context) => AlertDialog(
                       backgroundColor: AppColors.surface,
-                      title: const Text('Покинуть клан?'),
+                      title: const Text('Покинуть команду?'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
@@ -87,7 +87,7 @@ class ClanProfileScreen extends ConsumerWidget {
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(value: 'chat', child: Text('Клановой чат')),
+                const PopupMenuItem(value: 'chat', child: Text('Командный чат')),
                 const PopupMenuItem(value: 'leave', child: Text('Покинуть')),
               ],
             ),
@@ -335,7 +335,7 @@ class _JoinButton extends ConsumerWidget {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Заявка отправлена лидеру клана'),
+                    content: Text('Заявка отправлена лидеру команды'),
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
@@ -351,7 +351,7 @@ class _JoinButton extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Вступление только по заявке. Решение принимает создатель клана.',
+          'Вступление только по заявке. Решение принимает создатель команды.',
           style: TextStyle(
             color: AppColors.textTertiary,
             fontSize: 12.5,

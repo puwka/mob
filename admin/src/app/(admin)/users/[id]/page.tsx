@@ -8,7 +8,19 @@ import {
   LoadingBlock,
   PageHeader,
 } from "@/components/ui/page";
-import { adjustBalance, fetchPanelRole, fetchProfileTag, fetchUserDetail, setAppRole, setPanelRole, setProfileTag, setUserStatus, updateProfileAdmin } from "@/lib/api/admin";
+import {
+  adjustBalance,
+  fetchPanelRole,
+  fetchProfileTag,
+  fetchUserDetail,
+  grantUserAchievement,
+  revokeUserAchievement,
+  setAppRole,
+  setPanelRole,
+  setProfileTag,
+  setUserStatus,
+  updateProfileAdmin,
+} from "@/lib/api/admin";
 import { CITIES } from "@/lib/constants";
 import { computePlayerLevel, totalXpForLevel } from "@/lib/level";
 import type { AdminRole } from "@/lib/types";
@@ -167,6 +179,27 @@ export default function UserDetailPage() {
     onError: (err: Error) => setMessage(err.message),
   });
 
+  const achievementMutation = useMutation({
+    mutationFn: ({
+      achievementId,
+      action,
+    }: {
+      achievementId: string;
+      action: "grant" | "revoke";
+    }) =>
+      action === "grant"
+        ? grantUserAchievement(userId, achievementId)
+        : revokeUserAchievement(userId, achievementId),
+    onSuccess: async (_data, vars) => {
+      setMessage(
+        vars.action === "grant" ? "Достижение выдано" : "Достижение снято",
+      );
+      await queryClient.invalidateQueries({ queryKey: ["admin-user", userId] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-audit-logs"] });
+    },
+    onError: (err: Error) => setMessage(err.message),
+  });
+
   if (detailQuery.isLoading) return <LoadingBlock />;
   if (detailQuery.error) {
     return <ErrorBlock message={(detailQuery.error as Error).message} />;
@@ -206,7 +239,7 @@ export default function UserDetailPage() {
           <div className="mt-1 text-sm text-graphite-600">
             {user.phone} · {user.city} · Ур.{" "}
             {computePlayerLevel(user.rating)} · XP {formatNumber(user.rating)}
-            {user.clan_name ? ` · клан ${user.clan_name}` : ""}
+            {user.clan_name ? ` · команда ${user.clan_name}` : ""}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -468,7 +501,7 @@ export default function UserDetailPage() {
             <h2 className="mb-3 text-sm font-semibold text-white">Статистика</h2>
             <dl className="grid grid-cols-2 gap-2 text-sm">
               <Stat label="Создан" value={formatDate(user.created_at)} />
-              <Stat label="Клан" value={user.clan_name ?? "—"} />
+              <Stat label="Команда" value={user.clan_name ?? "—"} />
               <Stat label="Игры" value={formatNumber(user.games_played)} />
               <Stat label="Победы" value={formatNumber(user.wins)} />
             </dl>
@@ -543,16 +576,62 @@ export default function UserDetailPage() {
 
           <div className="admin-card p-4">
             <h2 className="mb-3 text-sm font-semibold text-white">Достижения</h2>
-            <div className="space-y-1.5">
-              {(detailQuery.data?.achievements ?? []).map((a, idx) => (
+            <div className="space-y-2">
+              {(detailQuery.data?.achievements ?? []).map((a) => (
                 <div
-                  key={`${a.title}-${idx}`}
-                  className="flex items-center justify-between text-sm"
+                  key={a.achievement_id}
+                  className="flex items-start justify-between gap-3 text-sm"
                 >
-                  <span className="text-white">{a.title}</span>
-                  <Badge tone={a.unlocked ? "lime" : "neutral"}>
-                    {a.unlocked ? "unlocked" : `prog ${a.progress}`}
-                  </Badge>
+                  <div className="min-w-0">
+                    <div className="text-white">{a.title}</div>
+                    <div className="text-[11px] text-graphite-600">
+                      {a.progress}/{a.required_value}
+                      {a.admin_override === "granted"
+                        ? " · выдано админом"
+                        : a.admin_override === "revoked"
+                          ? " · снято админом"
+                          : null}
+                      {!a.is_active ? " · неактивно" : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tone={a.unlocked ? "lime" : "neutral"}>
+                      {a.unlocked ? "unlocked" : "locked"}
+                    </Badge>
+                    {can("achievements") ? (
+                      a.unlocked ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px] text-red-400"
+                          disabled={achievementMutation.isPending}
+                          onClick={() =>
+                            achievementMutation.mutate({
+                              achievementId: a.achievement_id,
+                              action: "revoke",
+                            })
+                          }
+                        >
+                          Забрать
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px] text-lime"
+                          disabled={achievementMutation.isPending}
+                          onClick={() =>
+                            achievementMutation.mutate({
+                              achievementId: a.achievement_id,
+                              action: "grant",
+                            })
+                          }
+                        >
+                          Выдать
+                        </Button>
+                      )
+                    ) : null}
+                  </div>
                 </div>
               ))}
               {(detailQuery.data?.achievements?.length ?? 0) === 0 ? (

@@ -161,7 +161,7 @@ class _DatingScreenState extends ConsumerState<DatingScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Дейтинг'),
+        title: const Text('Дружба'),
         actions: [
           IconButton(
             tooltip:

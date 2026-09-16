@@ -44,7 +44,7 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Кланы'),
+        title: const Text('Команды'),
         actions: [
           if (myClan == null)
             TextButton(
@@ -53,7 +53,7 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        'Создать клан можно с ${LevelService.minLevelToCreateClan} уровня '
+                        'Создать команду можно с ${LevelService.minLevelToCreateClan} уровня '
                         '(сейчас $level)',
                       ),
                       behavior: SnackBarBehavior.floating,
@@ -82,7 +82,7 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Кланы города: $profileCity',
+                  'Команды города: $profileCity',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.textTertiary,
                       ),
@@ -102,7 +102,7 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
                   });
                 },
                 decoration: const InputDecoration(
-                  hintText: 'Поиск клана по имени или TAG',
+                  hintText: 'Поиск команды по имени или TAG',
                   prefixIcon: Icon(Icons.search, size: 18),
                   isDense: true,
                 ),
@@ -121,10 +121,10 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
                   return Padding(
                     padding: const EdgeInsets.all(16),
                     child: EmptyStateCard(
-                      title: 'Кланы не найдены',
+                      title: 'Команды не найдены',
                       subtitle: profileCity.isEmpty
-                          ? 'Укажите город в профиле, чтобы видеть кланы своего города.'
-                          : 'В городе $profileCity пока нет кланов. Создайте свой или смотрите все в рейтинге (Общий).',
+                          ? 'Укажите город в профиле, чтобы видеть команды своего города.'
+                          : 'В городе $profileCity пока нет команд. Создайте свою или смотрите все в рейтинге (Общий).',
                       icon: Icons.shield_outlined,
                     ),
                   );
@@ -162,7 +162,7 @@ class _ClanSearchScreenState extends ConsumerState<ClanSearchScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Заявка отправлена лидеру клана'),
+          content: Text('Заявка отправлена лидеру команды'),
           behavior: SnackBarBehavior.floating,
         ),
       );

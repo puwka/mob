@@ -1,3 +1,8 @@
+/// Stable IDs from marketplace category seeds/migrations.
+abstract final class MarketKnownCategories {
+  static const servicesRootId = 'a1000000-0000-4000-8000-000000000007';
+}
+
 class MarketCategory {
   const MarketCategory({
     required this.id,
@@ -16,6 +21,8 @@ class MarketCategory {
   final DateTime createdAt;
 
   bool get isRoot => parentId == null;
+
+  bool get isServicesRoot => id == MarketKnownCategories.servicesRootId;
 
   factory MarketCategory.fromJson(Map<String, dynamic> json) {
     return MarketCategory(
@@ -166,6 +173,9 @@ class Listing {
   String? get coverUrl =>
       images.isEmpty ? null : images.first.url;
 
+  bool get isServiceListing =>
+      parentCategoryName == 'Услуги' || categoryName == 'Услуги';
+
   String get priceLabel {
     final v = price == price.roundToDouble()
         ? price.toInt().toString()
@@ -179,7 +189,7 @@ class Listing {
         : (categoryName ?? '');
     final parts = <String>[
       if (cat.isNotEmpty) cat,
-      condition.labelRu,
+      if (!isServiceListing) condition.labelRu,
     ];
     return parts.join(' · ');
   }

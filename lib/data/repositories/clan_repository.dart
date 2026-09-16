@@ -395,26 +395,26 @@ class ClanRepository {
 
   String _map(Object e) {
     final raw = e.toString().toUpperCase();
-    if (raw.contains('NAME_TAKEN')) return 'Название клана уже занято';
+    if (raw.contains('NAME_TAKEN')) return 'Название команды уже занято';
     if (raw.contains('TAG_TAKEN')) return 'TAG уже занят';
-    if (raw.contains('INVALID_NAME')) return 'Некорректное название клана';
+    if (raw.contains('INVALID_NAME')) return 'Некорректное название команды';
     if (raw.contains('INVALID_TAG')) {
       return 'TAG: 2–6 символов (A-Z, 0-9)';
     }
     if (raw.contains('LEVEL_TOO_LOW')) {
-      return 'Создать клан можно с 3 уровня';
+      return 'Создать команду можно с 3 уровня';
     }
     if (raw.contains('ALREADY_IN_CLAN')) {
-      return 'Вы уже состоите в клане';
+      return 'Вы уже состоите в команде';
     }
-    if (raw.contains('NOT_IN_CLAN')) return 'Вы не состоите в клане';
+    if (raw.contains('NOT_IN_CLAN')) return 'Вы не состоите в команде';
     if (raw.contains('INVALID_CLAN_ROLE')) return 'Некорректная должность';
-    if (raw.contains('INVALID_CITY')) return 'Укажите местоположение клана';
+    if (raw.contains('INVALID_CITY')) return 'Укажите местоположение команды';
     if (raw.contains('NOT_CLAN_LEADER')) {
-      return 'Только командир может менять данные клана';
+      return 'Только командир может менять данные команды';
     }
     if (raw.contains('NOT_ALLOWED')) return 'Недостаточно прав';
-    if (raw.contains('CLAN_NOT_FOUND')) return 'Клан не найден';
+    if (raw.contains('CLAN_NOT_FOUND')) return 'Команда не найдена';
     if (raw.contains('REQUEST_NOT_FOUND')) return 'Заявка не найдена';
     if (raw.contains('REQUEST_NOT_PENDING')) return 'Заявка уже обработана';
     return ErrorMapper.map(e);

@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 const KIND_LABEL: Record<string, string> = {
   new_user: "Новый пользователь",
   new_event: "Новое мероприятие",
-  clan_join_request: "Заявка в клан",
+  clan_join_request: "Заявка в команду",
   new_listing: "Новое объявление",
   achievement_unlock: "Достижение",
 };
@@ -56,7 +56,7 @@ export default function DashboardPage() {
             value={formatNumber(stats.events_active)}
             hint={`Всего: ${formatNumber(stats.events_total)}`}
           />
-          <StatCard label="Кланы" value={formatNumber(stats.clans_total)} />
+          <StatCard label="Команды" value={formatNumber(stats.clans_total)} />
           <StatCard
             label="Активные объявления"
             value={formatNumber(stats.listings_active)}

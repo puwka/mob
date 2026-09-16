@@ -121,8 +121,16 @@ class AchievementsNotifier
     extends AsyncNotifier<List<UserAchievementProgress>> {
   @override
   Future<List<UserAchievementProgress>> build() async {
-    final profile = await ref.watch(currentProfileProvider.future);
+    // Watch auth only — watching the profile caused an infinite reload loop
+    // because sync grants XP and refreshes the profile.
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const [];
+
+    var profile = ref.read(currentProfileProvider).valueOrNull;
+    profile ??=
+        await ref.read(profileRepositoryProvider).getByIdOrNull(user.id);
     if (profile == null) return const [];
+
     final eventsCount = await ref.watch(userEventsCountProvider.future);
     return _sync(profile, eventsCount);
   }
@@ -137,7 +145,22 @@ class AchievementsNotifier
               profile: profile,
               eventsCount: eventsCount,
             );
+    // Pull updated rating/XP after possible reward grants — safe because
+    // this notifier no longer watches currentProfileProvider.
+    unawaited(_refreshProfileQuiet());
     return result.items;
+  }
+
+  Future<void> _refreshProfileQuiet() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+    try {
+      final profile =
+          await ref.read(profileRepositoryProvider).getByIdOrNull(user.id);
+      if (profile != null) {
+        ref.read(currentProfileProvider.notifier).setProfile(profile);
+      }
+    } catch (_) {}
   }
 
   void setItems(List<UserAchievementProgress> items) {
